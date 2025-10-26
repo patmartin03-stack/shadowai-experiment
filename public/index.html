@@ -5,8 +5,11 @@
   <title>Shadow AI – Experimento</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#111" />
+
+  <!-- jsPsych CSS -->
   <link rel="stylesheet" href="https://unpkg.com/jspsych@7.3.3/css/jspsych.css" />
-  <link rel="stylesheet" href="/css/style.css" />
+  <!-- Tu CSS local -->
+  <link rel="stylesheet" href="./css/style.css" />
 </head>
 <body>
   <header class="topbar">
@@ -19,18 +22,18 @@
     </div>
   </header>
 
-  <!-- jsPsych colocará aquí el contenido -->
+  <!-- jsPsych renderiza aquí -->
   <div id="jspsych-target" class="container"></div>
 
-  <!-- jsPsych core + plugins -->
-  <script src="https://unpkg.com/jspsych@7.3.3/dist/jspsych.js"></script>
-  <script src="https://unpkg.com/@jspsych/plugin-html-button-response@1.2.0"></script>
-  <script src="https://unpkg.com/@jspsych/plugin-survey-html-form@1.2.0"></script>
-  <script src="https://unpkg.com/@jspsych/plugin-survey-multi-choice@1.2.0"></script>
-  <script src="https://unpkg.com/@jspsych/plugin-instructions@1.2.0"></script>
-  <script src="https://unpkg.com/@jspsych/plugin-call-function@1.2.0"></script>
+  <!-- jsPsych core y plugins (versiones válidas en CDN) -->
+  <script src="https://unpkg.com/jspsych@7.3.3/dist/index.browser.js"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-html-button-response@1.2.0/dist/index.browser.js"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-survey-html-form@1.2.0/dist/index.browser.js"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-survey-multi-choice@1.2.0/dist/index.browser.js"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-instructions@1.2.0/dist/index.browser.js"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-call-function@1.2.0/dist/index.browser.js"></script>
 
-  <!-- Tu lógica del experimento -->
-  <script src="/js/experiment.js"></script>
+  <!-- Tu JS local -->
+  <script src="./js/experiment.js"></script>
 </body>
 </html>
