@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Shadow AI – Experimento</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#111" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header class="container">
+    <!-- Logo SVG embebido (no necesitas subir imagen) -->
+    <div class="logo" aria-label="Shadow AI logo" title="Shadow AI">
+      <svg viewBox="0 0 64 64" width="40" height="40" role="img" aria-hidden="true">
+        <circle cx="32" cy="32" r="28" fill="currentColor" opacity="0.15"></circle>
+        <path d="M12 34c4-10 14-16 26-14 6 1 10 5 14 10-4 10-14 16-26 14-6-1-10-5-14-10z" fill="currentColor"/>
+      </svg>
+      <h1>Shadow AI – Experimento</h1>
+    </div>
+  </header>
+
+  <main class="container" id="app">
+    <!-- Pantallas gestionadas por JS -->
+    <section id="screen-root" class="card">
+      <h2>Bienvenida</h2>
+      <p>
+        Este experimento forma parte de un Trabajo de Fin de Grado en la Universidad Pontificia Comillas.
+        La información se recoge de forma anónima y su uso es únicamente académico.
+      </p>
+      <label class="checkbox">
+        <input type="checkbox" id="consent" />
+        Acepto participar y el uso anónimo de mis datos.
+      </label>
+      <button class="btn" id="startBtn" disabled>Comenzar</button>
+    </section>
+
+    <section id="screen-demographics" class="card hidden">
+      <h2>Datos iniciales</h2>
+      <label class="label">Año de nacimiento</label>
+      <input class="input" type="number" id="birth_year" placeholder="Ej: 2002" min="1900" max="2030"/>
+
+      <label class="label">Estudios superiores cursados</label>
+      <select class="input" id="studies">
+        <option value="">Selecciona…</option>
+        <option>Grado</option>
+        <option>Máster</option>
+        <option>Doctorado</option>
+        <option>Ya graduado/a (Grado o Máster)</option>
+      </select>
+
+      <div id="grad_year_wrap" class="hidden">
+        <label class="label">Año de graduación</label>
+        <input class="input" type="number" id="grad_year" placeholder="Ej: 2024" min="1950" max="2035" />
+      </div>
+
+      <button class="btn" id="nextToTask">Continuar</button>
+    </section>
+
+    <section id="screen-task" class="card hidden">
+      <h2>Tarea breve</h2>
+      <p>Escribe dos frases sobre cómo te ayudarán tus estudios a realizar una tarea analítica.</p>
+      <textarea class="input" id="task_text" rows="6" placeholder="Escribe aquí…"></textarea>
+
+      <div class="row">
+        <button class="btn-outline" id="aiHelp">Botón IA (registrado, sin clave)</button>
+        <button class="btn" id="finishTask">Finalizar</button>
+      </div>
+      <p class="hint">Nota: el botón IA solo registra que lo pulsaste; no llama a ningún modelo.</p>
+    </section>
+
+    <section id="screen-thanks" class="card hidden center">
+      <h2>¡Gracias!</h2>
+      <p>Tu código de participante es:</p>
+      <p id="subjectId" class="code"></p>
+      <button class="btn" id="copyCode">Copiar código</button>
+    </section>
+  </main>
+
+  <footer class="container muted">
+    <small>© Shadow AI | Sin claves de API en el frontend.</small>
+  </footer>
+
+  <script src="/js/experiment.js" defer></script>
+</body>
+</html>
