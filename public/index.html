@@ -5,221 +5,32 @@
   <title>Shadow AI – Experimento</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#111" />
+  <link rel="stylesheet" href="https://unpkg.com/jspsych@7.3.3/css/jspsych.css" />
   <link rel="stylesheet" href="/css/style.css" />
 </head>
 <body>
-  <!-- Barra de progreso de 8 pasos -->
-  <div class="progress-wrap">
-    <div class="progress" id="progress" style="--step:1; --total:8;"></div>
-    <div class="steps">
-      <span>1</span><span>2</span><span>3</span><span>4</span>
-      <span>5</span><span>6</span><span>7</span><span>8</span>
-    </div>
-  </div>
-
-  <header class="container">
+  <header class="topbar">
     <div class="logo">
-      <svg viewBox="0 0 64 64" width="36" height="36" aria-hidden="true">
+      <svg viewBox="0 0 64 64" width="28" height="28" aria-hidden="true">
         <circle cx="32" cy="32" r="28" fill="currentColor" opacity="0.15"></circle>
         <path d="M12 34c4-10 14-16 26-14 6 1 10 5 14 10-4 10-14 16-26 14-6-1-10-5-14-10z" fill="currentColor"/>
       </svg>
-      <h1>Shadow AI – Experimento</h1>
+      <span>Shadow AI – Experimento</span>
     </div>
   </header>
 
-  <main class="container" id="app">
+  <!-- jsPsych colocará aquí el contenido -->
+  <div id="jspsych-target" class="container"></div>
 
-    <!-- PANTALLA 1: Bienvenida -->
-    <section id="s1" class="card">
-      <h2>Bienvenida</h2>
-      <p>
-        El siguiente experimento forma parte de un Trabajo de Fin de Grado para la Universidad Pontificia Comillas.
-        Toda la información será recolectada de forma anónima y su uso será únicamente académico y de investigación.
-        Por favor, mantente hasta el final. Gracias.
-      </p>
-      <p class="muted">Contacto: <a href="mailto:pmartinmartinez@alu.comillas.edu">pmartinmartinez@alu.comillas.edu</a></p>
-      <label class="checkbox">
-        <input type="checkbox" id="consent" />
-        Acepto participar y el uso anónimo de mis datos.
-      </label>
-      <button class="btn" id="s1_next" disabled>Continuar</button>
-    </section>
+  <!-- jsPsych core + plugins -->
+  <script src="https://unpkg.com/jspsych@7.3.3/dist/jspsych.js"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-html-button-response@1.2.0"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-survey-html-form@1.2.0"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-survey-multi-choice@1.2.0"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-instructions@1.2.0"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-call-function@1.2.0"></script>
 
-    <!-- PANTALLA 2: Año nacimiento + estudios -->
-    <section id="s2" class="card hidden">
-      <h2>Datos iniciales</h2>
-
-      <label class="label">Fecha de nacimiento (dd/mm/aaaa)</label>
-      <div class="row-3">
-        <input class="input" type="number" id="dob_day" placeholder="dd" min="1" max="31" />
-        <input class="input" type="number" id="dob_month" placeholder="mm" min="1" max="12" />
-        <input class="input" type="number" id="dob_year" placeholder="aaaa" min="1900" max="2035" />
-      </div>
-
-      <label class="label">Estudios superiores cursados</label>
-      <select class="input" id="studies">
-        <option value="">Selecciona…</option>
-        <option>Grado</option>
-        <option>Máster</option>
-        <option>Doctorado</option>
-        <option>Ya graduado/a (Grado o Máster)</option>
-      </select>
-
-      <div id="grad_year_wrap" class="hidden">
-        <label class="label">Año de graduación</label>
-        <input class="input" type="number" id="grad_year" placeholder="Ej: 2024" min="1950" max="2035" />
-      </div>
-
-      <button class="btn" id="s2_next">Continuar</button>
-    </section>
-
-    <!-- PANTALLA 3: Introducción a la tarea + Política IA aleatoria -->
-    <section id="s3" class="card hidden">
-      <h2>Introducción a la tarea</h2>
-      <p>
-        Explica brevemente cómo los últimos estudios que has cursado te ayudarán en un futuro cercano o lejano
-        y/o cómo tu labor puede contribuir a crear una sociedad mejor.
-      </p>
-
-      <div class="policy">
-        <small id="policy_label">Política de IA: …</small>
-      </div>
-
-      <div class="right">
-        <button class="btn" id="s3_next">Continuar</button>
-      </div>
-    </section>
-
-    <!-- PANTALLA 4: Tarea (150–300 palabras) + Ayuda IA local -->
-    <section id="s4" class="card hidden">
-      <h2>Tarea</h2>
-      <p>Redacta un texto entre <strong>150 y 300 palabras</strong>.</p>
-
-      <textarea class="input" id="task_text" rows="10" placeholder="Escribe aquí…"></textarea>
-      <div class="task-tools">
-        <button class="btn-outline" id="ai_help">Ayuda de IA</button>
-        <span class="muted" id="word_count">0 palabras</span>
-      </div>
-
-      <!-- Panel de sugerencias (no usa API, sólo texto local) -->
-      <div id="ai_suggestions" class="suggestions hidden"></div>
-
-      <div class="right">
-        <button class="btn" id="s4_next" disabled>Continuar</button>
-      </div>
-    </section>
-
-    <!-- PANTALLA 5: Cuestionario variables de control -->
-    <section id="s5" class="card hidden">
-      <h2>Cuestionario (control)</h2>
-
-      <label class="label">¿Te diste cuenta de que había una indicación sobre el uso de IA?</label>
-      <div class="radios">
-        <label><input type="radio" name="noticed_policy" value="sí"> Sí</label>
-        <label><input type="radio" name="noticed_policy" value="no"> No</label>
-        <label><input type="radio" name="noticed_policy" value="no_seguro"> No estoy seguro/a</label>
-      </div>
-
-      <label class="label">¿Usaste el botón de ayuda de IA?</label>
-      <div class="radios">
-        <label><input type="radio" name="used_ai_button" value="sí"> Sí</label>
-        <label><input type="radio" name="used_ai_button" value="no"> No</label>
-      </div>
-
-      <label class="label">¿Usaste alguna IA externa al experimento?</label>
-      <div class="radios">
-        <label><input type="radio" name="used_external_ai" value="sí"> Sí</label>
-        <label><input type="radio" name="used_external_ai" value="no"> No</label>
-        <label><input type="radio" name="used_external_ai" value="prefiero_no_decir"> Prefiero no decir</label>
-      </div>
-
-      <div class="right">
-        <button class="btn" id="s5_next">Continuar</button>
-      </div>
-    </section>
-
-    <!-- PANTALLA 6: Demográficas ampliadas -->
-    <section id="s6" class="card hidden">
-      <h2>Datos demográficos</h2>
-
-      <label class="label">Universidad en la que has estudiado</label>
-      <input class="input" id="uni" placeholder="Ej: Universidad Pontificia Comillas" />
-
-      <label class="label">Rama de conocimiento de los últimos estudios</label>
-      <select class="input" id="field">
-        <option value="">Selecciona…</option>
-        <option>Ciencias Sociales y Jurídicas</option>
-        <option>Ingeniería y Arquitectura</option>
-        <option>Artes y Humanidades</option>
-        <option>Ciencias</option>
-        <option>Ciencias de la Salud</option>
-        <option>Otra</option>
-      </select>
-
-      <label class="label">Ciudad donde estudiaste/estudias</label>
-      <input class="input" id="city" placeholder="Ej: Madrid" />
-
-      <label class="label">Nota media de los últimos estudios (0–10)</label>
-      <input class="input" type="number" id="gpa" min="0" max="10" step="0.01" placeholder="Ej: 7.8" />
-
-      <div class="right">
-        <button class="btn" id="s6_next">Continuar</button>
-      </div>
-    </section>
-
-    <!-- PANTALLA 7: Cuestionarios personalidad / behavioural -->
-    <section id="s7" class="card hidden">
-      <h2>Cuestionario de personalidad</h2>
-      <p class="muted">Selecciona la opción que mejor te representa.</p>
-
-      <!-- Ejemplos cortos (puedes ampliarlos luego) -->
-      <div class="quiz">
-        <p><strong>1.</strong> Cuando una norma me parece injusta, tiendo a no cumplirla.</p>
-        <label><input type="radio" name="q1" value="Totalmente en desacuerdo"> Totalmente en desacuerdo</label>
-        <label><input type="radio" name="q1" value="En desacuerdo"> En desacuerdo</label>
-        <label><input type="radio" name="q1" value="De acuerdo"> De acuerdo</label>
-        <label><input type="radio" name="q1" value="Totalmente de acuerdo"> Totalmente de acuerdo</label>
-      </div>
-
-      <div class="quiz">
-        <p><strong>2.</strong> Suelo subestimar el tiempo que me llevará completar una tarea.</p>
-        <label><input type="radio" name="q2" value="Nunca"> Nunca</label>
-        <label><input type="radio" name="q2" value="A veces"> A veces</label>
-        <label><input type="radio" name="q2" value="A menudo"> A menudo</label>
-        <label><input type="radio" name="q2" value="Siempre"> Siempre</label>
-      </div>
-
-      <div class="quiz">
-        <p><strong>3.</strong> Me siento cómodo/a pidiendo ayuda a herramientas digitales.</p>
-        <label><input type="radio" name="q3" value="Nada"> Nada</label>
-        <label><input type="radio" name="q3" value="Poco"> Poco</label>
-        <label><input type="radio" name="q3" value="Bastante"> Bastante</label>
-        <label><input type="radio" name="q3" value="Mucho"> Mucho</label>
-      </div>
-
-      <div class="right">
-        <button class="btn" id="s7_next">Continuar</button>
-      </div>
-    </section>
-
-    <!-- PANTALLA 8: Gracias -->
-    <section id="s8" class="card hidden center">
-      <h2>¡Gracias!</h2>
-      <p>Tu código de participante es:</p>
-      <p id="subjectId" class="code"></p>
-      <p class="muted">Si deseas más información o retirar tus datos, escríbenos a:
-        <a href="mailto:pmartinmartinez@alu.comillas.edu">pmartinmartinez@alu.comillas.edu</a>
-      </p>
-      <button class="btn" id="copyCode">Copiar código</button>
-    </section>
-
-  </main>
-
-  <footer class="container muted">
-    <small>© Shadow AI | Sin claves de API en el frontend.</small>
-  </footer>
-
-  <script src="/js/experiment.js" defer></script>
+  <!-- Tu lógica del experimento -->
+  <script src="/js/experiment.js"></script>
 </body>
 </html>
-
