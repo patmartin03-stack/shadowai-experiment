@@ -6,10 +6,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#111" />
 
-  <!-- jsPsych CSS -->
+  <!-- Estilos: jsPsych (CDN) + tu CSS (ruta relativa, válida en Render y en file://) -->
   <link rel="stylesheet" href="https://unpkg.com/jspsych@7.3.3/css/jspsych.css" />
-  <!-- Tu CSS local -->
-  <link rel="stylesheet" href="./css/style.css" />
+  <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
   <header class="topbar">
@@ -22,10 +21,10 @@
     </div>
   </header>
 
-  <!-- jsPsych renderiza aquí -->
+  <!-- Aquí jsPsych dibuja el experimento -->
   <div id="jspsych-target" class="container"></div>
 
-  <!-- jsPsych core y plugins (versiones válidas en CDN) -->
+  <!-- jsPsych core y plugins (USAR las variantes index.browser.js) -->
   <script src="https://unpkg.com/jspsych@7.3.3/dist/index.browser.js"></script>
   <script src="https://unpkg.com/@jspsych/plugin-html-button-response@1.2.0/dist/index.browser.js"></script>
   <script src="https://unpkg.com/@jspsych/plugin-survey-html-form@1.2.0/dist/index.browser.js"></script>
@@ -33,7 +32,7 @@
   <script src="https://unpkg.com/@jspsych/plugin-instructions@1.2.0/dist/index.browser.js"></script>
   <script src="https://unpkg.com/@jspsych/plugin-call-function@1.2.0/dist/index.browser.js"></script>
 
-  <!-- Tu JS local -->
-  <script src="./js/experiment.js"></script>
+  <!-- Tu lógica -->
+  <script src="js/experiment.js"></script>
 </body>
 </html>
