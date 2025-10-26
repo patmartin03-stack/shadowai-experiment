@@ -1,79 +1,144 @@
-# app.py
-# Backend Flask sencillo para registrar eventos (/log) y cierre (/finalize)
-# Sirve archivos estáticos desde /public. NO usa ninguna clave de API.
+# =============================================================
+# Shadow AI — Backend Flask conectado a Supabase (v1.0)
+# =============================================================
 
-import os, csv
+import os, json, requests
 from datetime import datetime
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-LOG_DIR = os.path.join(BASE_DIR, "logs")
-os.makedirs(LOG_DIR, exist_ok=True)
+# =============================================================
+# CONFIGURACIÓN — PON AQUÍ TUS VARIABLES DE SUPABASE
+# =============================================================
+import os
 
-app = Flask(__name__, static_folder='public', static_url_path='')
-CORS(app)  # permite que el frontend (misma URL o localhost) llame al backend
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
-# ---------- Rutas de frontend (estático) ----------
-@app.route('/')
-def root():
-    # Sirve index.html desde /public
-    return send_from_directory(app.static_folder, 'index.html')
+# No toques lo de abajo
+SUPABASE_HEADERS = {
+    "apikey": SUPABASE_SERVICE_ROLE_KEY,
+    "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+    "Content-Type": "application/json"
+}
 
-# ---------- API: registrar eventos de la sesión ----------
-@app.route('/log', methods=['POST'])
+# =============================================================
+# INICIALIZAR FLASK
+# =============================================================
+app = Flask(__name__)
+CORS(app)
+
+# =============================================================
+# ENDPOINT 1: /log  → guarda cada evento
+# =============================================================
+@app.route("/log", methods=["POST"])
 def log_event():
-    data = request.get_json(force=True, silent=True) or {}
-    # Campos típicos: subject_id, event, payload (dict), ts
-    subject_id = data.get('subject_id', 'unknown')
-    event = data.get('event', 'unknown')
-    payload = data.get('payload', {})
-    ts = data.get('ts') or datetime.utcnow().isoformat()
+    try:
+        data = request.get_json(force=True)
+        data["ts"] = data.get("ts") or datetime.utcnow().isoformat()
 
-    file_path = os.path.join(LOG_DIR, 'events.csv')
-    write_header = not os.path.exists(file_path)
+        payload = {
+            "subject_id": data.get("subject_id"),
+            "policy": data.get("policy"),
+            "event": data.get("event"),
+            "ts": data["ts"],
+            "trial_type": data.get("payload", {}).get("trial_type"),
+            "rt_ms": data.get("payload", {}).get("rt_ms"),
+            "clicks": data.get("payload", {}).get("clicks"),
+            "idle_ms": data.get("payload", {}).get("idle_ms"),
+            "suggestion_index": data.get("payload", {}).get("suggestion_index"),
+            "selection_chars": data.get("payload", {}).get("selection_chars"),
+            "words": data.get("payload", {}).get("words"),
+            "text_len": data.get("payload", {}).get("text_len"),
+            "payload": data.get("payload", {}),
+        }
 
-    with open(file_path, 'a', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=['ts', 'subject_id', 'event', 'payload'])
-        if write_header:
-            writer.writeheader()
-        writer.writerow({
-            'ts': ts,
-            'subject_id': subject_id,
-            'event': event,
-            'payload': str(payload)
-        })
-    return jsonify({'ok': True})
-
-# ---------- API: finalizar experimento ----------
-@app.route('/finalize', methods=['POST'])
-def finalize():
-    data = request.get_json(force=True, silent=True) or {}
-    # Espera un resumen de la sesión (subject_id, demographics, results...)
-    subject_id = data.get('subject_id', 'unknown')
-    demographics = data.get('demographics', {})
-    results = data.get('results', {})
-    ts = datetime.utcnow().isoformat()
-
-    file_path = os.path.join(LOG_DIR, 'final.csv')
-    write_header = not os.path.exists(file_path)
-
-    with open(file_path, 'a', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(
-            f,
-            fieldnames=['ts', 'subject_id', 'demographics', 'results']
+        # Inserta en shadowai.events
+        r = requests.post(
+            f"{SUPABASE_URL}/rest/v1/shadowai.events",
+            headers=SUPABASE_HEADERS,
+            data=json.dumps(payload)
         )
-        if write_header:
-            writer.writeheader()
-        writer.writerow({
-            'ts': ts,
-            'subject_id': subject_id,
-            'demographics': str(demographics),
-            'results': str(results)
-        })
-    return jsonify({'ok': True})
+        r.raise_for_status()
 
-# ---------- Ejecutar localmente (opcional) ----------
-if __name__ == '__main__':
-    # Para ejecutar local: python app.py  (requiere tener Python y paquetes instalados)
-    app.run(host='0.0.0.0', port=5000, debug=True)
+        return jsonify({"ok": True, "inserted": True}), 200
+    except Exception as e:
+        print("⚠️ Error en /log:", e)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+# =============================================================
+# ENDPOINT 2: /finalize  → guarda resumen final + demografía
+# =============================================================
+@app.route("/finalize", methods=["POST"])
+def finalize():
+    try:
+        data = request.get_json(force=True)
+        subject_id = data.get("subject_id")
+        demographics = data.get("demographics", {})
+        results = data.get("results", {})
+
+        # 1️⃣ Actualizar o insertar participante
+        participant_payload = {
+            "subject_id": subject_id,
+            "policy": demographics.get("policy"),
+            "dob": demographics.get("dob"),
+            "studies": demographics.get("studies"),
+            "grad_year": demographics.get("grad_year"),
+            "uni": demographics.get("uni"),
+            "field": demographics.get("field"),
+            "city": demographics.get("city"),
+            "gpa": demographics.get("gpa"),
+            "raw_demographics": demographics,
+            "last_seen": datetime.utcnow().isoformat()
+        }
+
+        requests.post(
+            f"{SUPABASE_URL}/rest/v1/shadowai.participants",
+            headers={**SUPABASE_HEADERS, "Prefer": "resolution=merge-duplicates"},
+            data=json.dumps(participant_payload)
+        )
+
+        # 2️⃣ Insertar resultado final
+        results_payload = {
+            "subject_id": subject_id,
+            "policy": demographics.get("policy"),
+            "task_text": results.get("task_text"),
+            "words": results.get("words"),
+            "edit_count": len(results.get("edits", [])),
+            "control_noticed_policy": results.get("control", {}).get("noticed_policy"),
+            "control_used_ai_button": results.get("control", {}).get("used_ai_button"),
+            "control_used_external_ai": results.get("control", {}).get("used_external_ai"),
+            "control": results.get("control"),
+            "personality_q1": results.get("personality", {}).get("q1"),
+            "personality_q2": results.get("personality", {}).get("q2"),
+            "personality_q3": results.get("personality", {}).get("q3"),
+            "personality": results.get("personality"),
+            "edits": results.get("edits"),
+            "demographics": demographics
+        }
+
+        r2 = requests.post(
+            f"{SUPABASE_URL}/rest/v1/shadowai.results",
+            headers={**SUPABASE_HEADERS, "Prefer": "resolution=merge-duplicates"},
+            data=json.dumps(results_payload)
+        )
+        r2.raise_for_status()
+
+        return jsonify({"ok": True, "finalized": True}), 200
+    except Exception as e:
+        print("⚠️ Error en /finalize:", e)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+# =============================================================
+# RAÍZ: mensaje de estado
+# =============================================================
+@app.route("/")
+def home():
+    return "✅ Shadow AI backend activo y conectado a Supabase."
+
+# =============================================================
+# EJECUCIÓN LOCAL (solo si corres manualmente)
+# =============================================================
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)
+
