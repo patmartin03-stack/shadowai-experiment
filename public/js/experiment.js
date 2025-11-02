@@ -12,9 +12,21 @@
 
   // Política IA aleatoria
   const policies = [
-    { key:'permisiva',   label:'Permisiva'   },
-    { key:'difusa',      label:'Difusa'      },
-    { key:'restrictiva', label:'Restrictiva' }
+    {
+      key:'permisiva',
+      label:'Permisiva',
+      description: 'Puedes usar libremente cualquier herramienta de inteligencia artificial para ayudarte en esta tarea. No hay restricciones sobre cómo o cuánto la utilizas.'
+    },
+    {
+      key:'difusa',
+      label:'Difusa',
+      description: 'Puedes usar herramientas de inteligencia artificial si lo consideras necesario, pero procura mantener tu propio criterio y estilo en el texto.'
+    },
+    {
+      key:'restrictiva',
+      label:'Restrictiva',
+      description: 'No debes usar herramientas de inteligencia artificial externas para esta tarea. Solo puedes utilizar el botón de "Ayuda de IA" que se proporciona en la plataforma.'
+    }
   ];
   const assignedPolicy = policies[Math.floor(Math.random()*policies.length)];
 
@@ -29,12 +41,19 @@
   async function sendLog(event, payload={}) {
     const body = { subject_id, event, payload, ts: nowIso(), policy: assignedPolicy.key };
     try {
-      await fetch('/log', {
+      const response = await fetch('/log', {
         method:'POST',
         headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify(body)
       });
-    } catch (_) { /* sin backend local → es normal al abrir HTML suelto */ }
+      // No lanzar error si el servidor responde con 500, solo loguear
+      if (!response.ok) {
+        console.warn(`⚠️ Log failed for event "${event}":`, response.status);
+      }
+    } catch (err) {
+      // Sin backend o error de red → silenciar para no interrumpir el experimento
+      console.warn(`⚠️ Log network error for event "${event}":`, err.message);
+    }
   }
 
   // Arranca contador de inactividad (inactividad >2s suma)
@@ -90,7 +109,8 @@
     const delta = now - lastClickAt;
     lastClickAt = now;
     trialClickCount += 1;
-    sendLog('click', { since_prev_click_ms: delta });
+    // Fire and forget - no esperamos respuesta para no bloquear
+    sendLog('click', { since_prev_click_ms: delta }).catch(() => {});
   }
 
   // ====== VARIABLES QUE RECOGEMOS A LO LARGO DEL FLUJO ======
@@ -170,16 +190,20 @@
   };
 
   // ====== PANTALLA 3 — Introducción + política IA visible ======
+  const taskPrompt = 'Explica brevemente cómo los últimos estudios que has cursado te ayudarán en un futuro cercano o lejano y/o cómo tu labor puede contribuir a crear una sociedad mejor.';
+
   const s3 = {
     type: jsPsychHtmlButtonResponse,
     stimulus: `
       <div class="card-plain">
         <h2>Introducción a la tarea</h2>
         <p>
-          Explica brevemente cómo los últimos estudios que has cursado te ayudarán en un futuro cercano o lejano
-          y/o cómo tu labor puede contribuir a crear una sociedad mejor.
+          ${taskPrompt}
         </p>
-        <div class="policy"><small>Política de IA: <strong>${assignedPolicy.label}</strong></small></div>
+        <div class="policy">
+          <strong>Política de uso de IA:</strong>
+          <p>${assignedPolicy.description}</p>
+        </div>
       </div>
     `,
     choices: ['Continuar']
@@ -199,6 +223,7 @@
     stimulus: `
       <div>
         <h2>Tarea</h2>
+        <p class="task-prompt"><em>${taskPrompt}</em></p>
         <p>Redacta un texto entre <strong>150 y 300 palabras</strong>.</p>
         <textarea class="input" id="task_text" rows="10" placeholder="Escribe aquí…"></textarea>
         <div class="task-tools">
@@ -347,7 +372,7 @@
   const finalizeCall = {
     type: jsPsychCallFunction,
     async: true,
-    func: async () => {
+    func: async (done) => {
       const demographics = {
         dob: store.dob,
         studies: store.basicStudies,
@@ -363,13 +388,20 @@
         personality: store.personality
       };
       try {
-        await fetch('/finalize', {
+        const response = await fetch('/finalize', {
           method:'POST',
           headers:{ 'Content-Type':'application/json' },
           body: JSON.stringify({ subject_id, demographics, results })
         });
-      } catch (_) {}
-      await sendLog('finalize_sent', { ok:true });
+        if (!response.ok) {
+          console.warn('⚠️ Finalize failed:', response.status);
+        }
+      } catch (err) {
+        console.warn('⚠️ Finalize network error:', err.message);
+      }
+      // Siempre continuar, incluso si falla
+      await sendLog('finalize_sent', { ok:true }).catch(() => {});
+      done();
     }
   };
 

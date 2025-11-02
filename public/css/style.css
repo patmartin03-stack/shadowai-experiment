@@ -59,7 +59,18 @@ textarea{ resize:vertical; }
 .chip{ border:1px solid var(--border); border-radius:999px; padding:8px 12px; background:transparent; cursor:pointer; }
 .chip:hover{ background:rgba(127,127,127,.08); }
 
-.policy{ margin-top:10px; display:flex; justify-content:flex-end; }
+.policy{
+  margin-top:20px; padding:16px; border-radius:10px;
+  background:rgba(79, 70, 229, 0.08); border:1px solid rgba(79, 70, 229, 0.2);
+}
+.policy strong{ color:var(--accent); }
+.policy p{ margin:8px 0 0 0; line-height:1.6; }
+
+.task-prompt{
+  padding:12px 16px; background:rgba(127,127,127,.08);
+  border-left:3px solid var(--accent); border-radius:4px;
+  margin:12px 0; color:var(--fg);
+}
 
 .code{
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
