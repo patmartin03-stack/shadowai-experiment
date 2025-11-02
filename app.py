@@ -6,14 +6,17 @@ import os, json, requests
 from datetime import datetime
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from openai import OpenAI
 
 # =============================================================
-# CONFIGURACIÓN — PON AQUÍ TUS VARIABLES DE SUPABASE
+# CONFIGURACIÓN — VARIABLES DE ENTORNO
 # =============================================================
-import os
-
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+# Inicializar cliente de OpenAI
+openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 # No toques lo de abajo
 SUPABASE_HEADERS = {
@@ -29,10 +32,23 @@ app = Flask(__name__)
 CORS(app)
 
 # =============================================================
-# ENDPOINT 1: /log  → guarda cada evento
+# ENDPOINT 1: /save  → guarda cada evento (antes /log)
 # =============================================================
-@app.route("/log", methods=["POST"])
+@app.route("/save", methods=["POST"])
+@app.route("/log", methods=["POST"])  # Alias para compatibilidad
 def log_event():
+    """
+    Endpoint para guardar eventos del experimento en Supabase.
+
+    Request body esperado:
+    {
+      "subject_id": "S-ABC123",
+      "policy": "permisiva" | "difusa" | "restrictiva",
+      "event": "screen_enter" | "screen_leave" | "click" | etc.,
+      "ts": "2025-11-02T12:34:56.789Z",
+      "payload": { ... datos específicos del evento ... }
+    }
+    """
     try:
         data = request.get_json(force=True)
         data["ts"] = data.get("ts") or datetime.utcnow().isoformat()
@@ -128,6 +144,132 @@ def finalize():
     except Exception as e:
         print("⚠️ Error en /finalize:", e)
         return jsonify({"ok": False, "error": str(e)}), 500
+
+# =============================================================
+# ENDPOINT 3: /assist  → llama a OpenAI para generar sugerencias
+# =============================================================
+@app.route("/assist", methods=["POST"])
+def assist():
+    """
+    Endpoint que llama a OpenAI para generar sugerencias de escritura.
+
+    Request body esperado:
+    {
+      "subject_id": "S-ABC123",
+      "policy": "permisiva" | "difusa" | "restrictiva",
+      "text": "texto actual del usuario",
+      "selection": "texto seleccionado (opcional)"
+    }
+
+    Response:
+    {
+      "ok": true,
+      "suggestions": ["sugerencia 1", "sugerencia 2", ...],
+      "model": "gpt-4o-mini",
+      "tokens": 150
+    }
+    """
+    try:
+        # Validar que OpenAI esté configurado
+        if not openai_client:
+            return jsonify({
+                "ok": False,
+                "error": "OpenAI no está configurado. Verifica OPENAI_API_KEY."
+            }), 500
+
+        # Extraer datos del request
+        data = request.get_json(force=True)
+        subject_id = data.get("subject_id", "unknown")
+        policy = data.get("policy", "permisiva")
+        text = data.get("text", "")
+        selection = data.get("selection", "")
+
+        # Construir prompt según la política
+        system_prompt = """Eres un asistente de escritura académica.
+Ayuda al usuario a mejorar su texto proporcionando sugerencias concretas y accionables.
+Devuelve exactamente 4 sugerencias breves (máximo 15 palabras cada una)."""
+
+        user_prompt = f"""Texto actual: {text[:500]}
+{"Texto seleccionado: " + selection if selection else ""}
+
+Proporciona 4 sugerencias específicas para mejorar este texto académico."""
+
+        # Llamar a OpenAI
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",  # Modelo económico y rápido
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            max_tokens=300,
+            temperature=0.7
+        )
+
+        # Extraer sugerencias del response
+        raw_text = response.choices[0].message.content
+        suggestions = [line.strip("- ").strip()
+                      for line in raw_text.split("\n")
+                      if line.strip() and len(line.strip()) > 10][:4]
+
+        # Si no se generaron 4, rellenar con sugerencias genéricas
+        if len(suggestions) < 4:
+            fallback = [
+                "Añade ejemplos concretos para ilustrar tu punto.",
+                "Conecta tus ideas con el contexto social actual.",
+                "Concluye resumiendo tu aportación principal.",
+                "Revisa la claridad de tus frases principales."
+            ]
+            suggestions.extend(fallback[:(4 - len(suggestions))])
+
+        # Registrar en Supabase (tabla events)
+        try:
+            log_payload = {
+                "subject_id": subject_id,
+                "policy": policy,
+                "event": "ai_assist_request",
+                "ts": datetime.utcnow().isoformat(),
+                "payload": {
+                    "text_len": len(text),
+                    "selection_len": len(selection),
+                    "model": "gpt-4o-mini",
+                    "tokens": response.usage.total_tokens
+                }
+            }
+            requests.post(
+                f"{SUPABASE_URL}/rest/v1/shadowai.events",
+                headers=SUPABASE_HEADERS,
+                data=json.dumps(log_payload)
+            )
+        except Exception as log_err:
+            print("⚠️ Error al registrar en Supabase:", log_err)
+
+        return jsonify({
+            "ok": True,
+            "suggestions": suggestions,
+            "model": "gpt-4o-mini",
+            "tokens": response.usage.total_tokens
+        }), 200
+
+    except Exception as e:
+        print("⚠️ Error en /assist:", e)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+# =============================================================
+# ENDPOINT 4: /health  → health check para Render
+# =============================================================
+@app.route("/health", methods=["GET"])
+def health():
+    """
+    Endpoint de health check para monitores de Render y otros servicios.
+    Verifica que el servidor esté activo y las variables estén configuradas.
+    """
+    status = {
+        "status": "ok",
+        "timestamp": datetime.utcnow().isoformat(),
+        "supabase_configured": bool(SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY),
+        "openai_configured": bool(OPENAI_API_KEY)
+    }
+    return jsonify(status), 200
 
 # =============================================================
 # RAÍZ: mensaje de estado

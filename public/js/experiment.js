@@ -185,13 +185,8 @@
     choices: ['Continuar']
   };
 
-  // ====== PANTALLA 4 — Tarea 150–300 palabras + Ayuda IA local ======
-  const suggestions = [
-    "Introduce un ejemplo concreto que ilustre tu argumento principal.",
-    "Conecta tus estudios con un impacto social medible (p. ej., sostenibilidad, inclusión).",
-    "Añade una breve conclusión que resuma tu aportación en 1-2 frases.",
-    "Reescribe la frase seleccionada con mayor claridad y voz activa."
-  ];
+  // ====== PANTALLA 4 — Tarea 150–300 palabras + Ayuda IA desde backend ======
+  let currentSuggestions = []; // Se llenan desde /assist
   let editLog = [];
 
   const s4 = {
@@ -228,28 +223,80 @@
       ta.addEventListener('input', update);
       update();
 
-      help.addEventListener('click', () => {
+      help.addEventListener('click', async () => {
         if (panel.classList.contains('hidden')) {
-          panel.innerHTML = suggestions.map((s,i)=>`<button class="chip" data-i="${i}" type="button">${s}</button>`).join('');
+          // Mostrar loading
+          panel.innerHTML = '<div class="chip">Generando sugerencias...</div>';
           panel.classList.remove('hidden');
+
+          try {
+            // Llamar a /assist con el texto actual
+            const response = await fetch('/assist', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                subject_id,
+                policy: assignedPolicy.key,
+                text: ta.value,
+                selection: ta.value.slice(ta.selectionStart, ta.selectionEnd)
+              })
+            });
+
+            const data = await response.json();
+
+            if (data.ok && data.suggestions) {
+              currentSuggestions = data.suggestions;
+              panel.innerHTML = currentSuggestions.map((s,i)=>
+                `<button class="chip" data-i="${i}" type="button">${s}</button>`
+              ).join('');
+              sendLog('ai_help_open', { tokens: data.tokens, model: data.model });
+            } else {
+              // Fallback si falla el backend
+              currentSuggestions = [
+                "Añade ejemplos concretos para ilustrar tu punto.",
+                "Conecta tus ideas con el contexto social actual.",
+                "Concluye resumiendo tu aportación principal.",
+                "Revisa la claridad de tus frases principales."
+              ];
+              panel.innerHTML = currentSuggestions.map((s,i)=>
+                `<button class="chip" data-i="${i}" type="button">${s}</button>`
+              ).join('');
+              sendLog('ai_help_open', { fallback: true });
+            }
+          } catch (err) {
+            // Fallback si no hay conexión
+            currentSuggestions = [
+              "Añade ejemplos concretos para ilustrar tu punto.",
+              "Conecta tus ideas con el contexto social actual.",
+              "Concluye resumiendo tu aportación principal.",
+              "Revisa la claridad de tus frases principales."
+            ];
+            panel.innerHTML = currentSuggestions.map((s,i)=>
+              `<button class="chip" data-i="${i}" type="button">${s}</button>`
+            ).join('');
+            sendLog('ai_help_open', { error: err.message });
+          }
         } else {
           panel.classList.add('hidden');
         }
-        sendLog('ai_help_open', {});
       });
 
       panel.addEventListener('click', (e)=>{
         const btn = e.target.closest('button.chip'); if(!btn) return;
         const idx = Number(btn.dataset.i);
-        const tip = suggestions[idx];
+        const tip = currentSuggestions[idx];
+        if (!tip) return; // Protección por si no hay sugerencias
+
         const start = ta.selectionStart, end = ta.selectionEnd;
         const hasSel = end>start;
         let injected = tip;
 
-        if (hasSel && tip.startsWith("Reescribe")) {
+        // Si hay texto seleccionado y la sugerencia menciona "reescribe" o "revisa"
+        if (hasSel && (tip.toLowerCase().includes("reescribe") || tip.toLowerCase().includes("revisa"))) {
           const sel = ta.value.slice(start,end);
           injected = sel.replace(/\b(puede|podría|quizá)\b/gi, ''); // reescritura simple
         } else if (!hasSel) {
+          // Sin selección, añadir sugerencia al final
           injected = (ta.value.endsWith('\n') ? '' : '\n') + tip;
         }
 
