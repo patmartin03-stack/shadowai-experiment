@@ -39,6 +39,7 @@
   let idleMs = 0;
   let lastActivityAt = Date.now();
   let idleTimer = null;
+  let screenStartTime = Date.now(); // Tiempo de inicio de cada pantalla
 
   // Enviar evento al backend (si no hay servidor, simplemente falla en silencio)
   async function sendLog(event, payload={}) {
@@ -87,11 +88,13 @@
     on_trial_start: async (t) => {
       trialClickCount = 0;
       lastClickAt = Date.now();
+      screenStartTime = Date.now(); // Resetear tiempo de inicio de pantalla
       startIdleWatch();
       // No enviar el objeto 't' completo porque tiene referencias circulares
       await sendLog('screen_enter', {
         index: jsPsych.getProgress().current_trial_global+1,
-        trial_type: t.type?.name || 'unknown'
+        trial_type: t.type?.name || 'unknown',
+        timestamp: screenStartTime
       });
       // contar clics dentro del trial
       document.addEventListener('click', clickBump, { once:false });
@@ -99,11 +102,17 @@
     on_trial_finish: async (data) => {
       stopIdleWatch();
       document.removeEventListener('click', clickBump, { once:false });
+      const screenEndTime = Date.now();
+      const timeOnScreen = screenEndTime - screenStartTime;
+
       await sendLog('screen_leave', {
         rt_ms: data.rt ?? null,
         clicks: trialClickCount,
         idle_ms: idleMs,
-        trial_type: data.trial_type
+        time_on_screen_ms: timeOnScreen,
+        time_on_screen_seconds: Math.round(timeOnScreen / 1000),
+        trial_type: data.trial_type,
+        trial_index: jsPsych.getProgress().current_trial_global
       });
     },
     on_finish: async () => {
@@ -111,13 +120,28 @@
     }
   });
 
-  function clickBump(){
+  function clickBump(e){
     const now = Date.now();
     const delta = now - lastClickAt;
     lastClickAt = now;
     trialClickCount += 1;
+
+    // Capturar información del elemento clickeado
+    const target = e.target;
+    const elementInfo = {
+      tag: target.tagName,
+      id: target.id || null,
+      class: target.className || null,
+      text: target.textContent?.slice(0, 50) || null, // Primeros 50 caracteres
+      type: target.type || null
+    };
+
     // Fire and forget - no esperamos respuesta para no bloquear
-    sendLog('click', { since_prev_click_ms: delta }).catch(() => {});
+    sendLog('click', {
+      since_prev_click_ms: delta,
+      element: elementInfo,
+      screen_time_ms: now - screenStartTime
+    }).catch(() => {});
   }
 
   // ====== VARIABLES QUE RECOGEMOS A LO LARGO DEL FLUJO ======
@@ -538,6 +562,14 @@
         control: store.control,
         personality: store.personality
       };
+
+      // Debug: verificar que task_text tiene contenido
+      console.log('📝 Enviando datos finales:', {
+        task_text_length: store.task_text?.length || 0,
+        words: results.words,
+        subject_id: subject_id
+      });
+
       try {
         const response = await fetch('/finalize', {
           method:'POST',
@@ -546,6 +578,10 @@
         });
         if (!response.ok) {
           console.warn('⚠️ Finalize failed:', response.status);
+          const errorText = await response.text();
+          console.warn('⚠️ Error details:', errorText);
+        } else {
+          console.log('✅ Datos guardados correctamente');
         }
       } catch (err) {
         console.warn('⚠️ Finalize network error:', err.message);
