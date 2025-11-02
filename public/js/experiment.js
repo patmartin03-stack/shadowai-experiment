@@ -28,7 +28,7 @@
       key:'restrictiva',
       label:'Restrictiva',
       description: 'No debes usar herramientas de inteligencia artificial para completar esta tarea. Por favor, redacta el texto por tu cuenta sin ayuda de IA.',
-      showAIButton: false
+      showAIButton: true
     }
   ];
   const assignedPolicy = policies[Math.floor(Math.random()*policies.length)];
