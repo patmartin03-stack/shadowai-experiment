@@ -15,17 +15,20 @@
     {
       key:'permisiva',
       label:'Permisiva',
-      description: 'Puedes usar libremente cualquier herramienta de inteligencia artificial para ayudarte en esta tarea. No hay restricciones sobre cómo o cuánto la utilizas.'
+      description: 'Puedes usar libremente cualquier herramienta de inteligencia artificial para ayudarte en esta tarea. No hay restricciones sobre cómo o cuánto la utilizas.',
+      showAIButton: true
     },
     {
       key:'difusa',
       label:'Difusa',
-      description: 'Puedes usar herramientas de inteligencia artificial si lo consideras necesario, pero procura mantener tu propio criterio y estilo en el texto.'
+      description: 'Puedes usar herramientas de inteligencia artificial si lo consideras necesario, pero procura mantener tu propio criterio y estilo en el texto.',
+      showAIButton: true
     },
     {
       key:'restrictiva',
       label:'Restrictiva',
-      description: 'No debes usar herramientas de inteligencia artificial externas para esta tarea. Solo puedes utilizar el botón de "Ayuda de IA" que se proporciona en la plataforma.'
+      description: 'No debes usar herramientas de inteligencia artificial para completar esta tarea. Por favor, redacta el texto por tu cuenta sin ayuda de IA.',
+      showAIButton: false
     }
   ];
   const assignedPolicy = policies[Math.floor(Math.random()*policies.length)];
@@ -209,13 +212,7 @@
     choices: ['Continuar']
   };
 
-  // ====== PANTALLA 4 — Tarea 150–300 palabras + Ayuda IA local ======
-  const suggestions = [
-    "Introduce un ejemplo concreto que ilustre tu argumento principal.",
-    "Conecta tus estudios con un impacto social medible (p. ej., sostenibilidad, inclusión).",
-    "Añade una breve conclusión que resuma tu aportación en 1-2 frases.",
-    "Reescribe la frase seleccionada con mayor claridad y voz activa."
-  ];
+  // ====== PANTALLA 4 — Tarea 150–300 palabras + Ayuda IA con OpenAI ======
   let editLog = [];
 
   const s4 = {
@@ -227,7 +224,7 @@
         <p>Redacta un texto entre <strong>150 y 300 palabras</strong>.</p>
         <textarea class="input" id="task_text" rows="10" placeholder="Escribe aquí…"></textarea>
         <div class="task-tools">
-          <button id="ai_help" class="btn-outline" type="button">Ayuda de IA</button>
+          ${assignedPolicy.showAIButton ? '<button id="ai_help" class="btn-outline" type="button">Ayuda de IA</button>' : ''}
           <span id="word_count" class="muted">0 palabras</span>
         </div>
         <div id="ai_suggestions" class="suggestions hidden"></div>
@@ -253,35 +250,72 @@
       ta.addEventListener('input', update);
       update();
 
-      help.addEventListener('click', () => {
-        if (panel.classList.contains('hidden')) {
-          panel.innerHTML = suggestions.map((s,i)=>`<button class="chip" data-i="${i}" type="button">${s}</button>`).join('');
-          panel.classList.remove('hidden');
-        } else {
+      // Solo si el botón existe (no en política restrictiva)
+      if (help) {
+        help.addEventListener('click', async () => {
+          // Deshabilitar botón mientras carga
+          help.disabled = true;
+          help.textContent = 'Generando sugerencia...';
           panel.classList.add('hidden');
-        }
-        sendLog('ai_help_open', {});
-      });
 
-      panel.addEventListener('click', (e)=>{
-        const btn = e.target.closest('button.chip'); if(!btn) return;
-        const idx = Number(btn.dataset.i);
-        const tip = suggestions[idx];
-        const start = ta.selectionStart, end = ta.selectionEnd;
-        const hasSel = end>start;
-        let injected = tip;
+          const text = ta.value;
+          const start = ta.selectionStart, end = ta.selectionEnd;
+          const selection = end > start ? ta.value.slice(start, end) : '';
 
-        if (hasSel && tip.startsWith("Reescribe")) {
-          const sel = ta.value.slice(start,end);
-          injected = sel.replace(/\b(puede|podría|quizá)\b/gi, ''); // reescritura simple
-        } else if (!hasSel) {
-          injected = (ta.value.endsWith('\n') ? '' : '\n') + tip;
-        }
+          try {
+            const response = await fetch('/ai-suggest', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                text: text,
+                selection: selection,
+                policy: assignedPolicy.key
+              })
+            });
 
-        ta.setRangeText(injected, start, end, 'end');
-        ta.dispatchEvent(new Event('input'));
-        sendLog('ai_help_use', { suggestion_index: idx, selection_chars: hasSel ? (end-start) : 0 });
-      });
+            if (!response.ok) {
+              throw new Error('Error al obtener sugerencia');
+            }
+
+            const result = await response.json();
+            const suggestion = result.suggestion;
+
+            // Mostrar sugerencia como botón clickeable
+            panel.innerHTML = `
+              <div style="display:flex; flex-direction:column; gap:8px; width:100%;">
+                <p class="muted" style="margin:0; font-size:0.9em;">Sugerencia de IA:</p>
+                <button class="chip ai-chip" type="button" style="text-align:left; white-space:normal;">${suggestion}</button>
+              </div>
+            `;
+            panel.classList.remove('hidden');
+
+            // Al hacer click, insertar la sugerencia
+            panel.querySelector('.ai-chip').addEventListener('click', () => {
+              if (selection) {
+                // Reemplazar selección
+                ta.setRangeText(suggestion, start, end, 'end');
+              } else {
+                // Añadir al final
+                const prefix = ta.value.endsWith('\n') || ta.value === '' ? '' : '\n';
+                ta.setRangeText(prefix + suggestion, ta.value.length, ta.value.length, 'end');
+              }
+              ta.dispatchEvent(new Event('input'));
+              panel.classList.add('hidden');
+              sendLog('ai_help_use', { suggestion: suggestion, selection_chars: selection.length });
+            });
+
+            sendLog('ai_help_open', { has_selection: selection.length > 0 });
+
+          } catch (error) {
+            panel.innerHTML = '<p class="muted" style="color:red;">Error al obtener sugerencia. Inténtalo de nuevo.</p>';
+            panel.classList.remove('hidden');
+            console.error('Error al obtener sugerencia de IA:', error);
+          } finally {
+            help.disabled = false;
+            help.textContent = 'Ayuda de IA';
+          }
+        });
+      }
     },
     on_finish: async (data) => {
       const txt = document.getElementById('task_text').value;
