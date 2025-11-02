@@ -1,27 +1,70 @@
 # =============================================================
-# Shadow AI — Backend Flask conectado a Supabase (v1.0)
+# Shadow AI — Backend Flask con Google Sheets (v2.0)
 # =============================================================
 
 import os, json, requests
 from datetime import datetime
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
+import gspread
+from google.oauth2.service_account import Credentials
 
 # =============================================================
-# CONFIGURACIÓN — PON AQUÍ TUS VARIABLES DE SUPABASE Y OPENAI
+# CONFIGURACIÓN — VARIABLES DE ENTORNO
 # =============================================================
-import os
-
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+GOOGLE_SHEETS_CREDENTIALS = os.getenv("GOOGLE_SHEETS_CREDENTIALS")  # JSON de credenciales
+GOOGLE_SHEET_NAME = os.getenv("GOOGLE_SHEET_NAME", "Shadow AI - Experimento")  # Nombre de tu Google Sheet
 
-# No toques lo de abajo
-SUPABASE_HEADERS = {
-    "apikey": SUPABASE_SERVICE_ROLE_KEY,
-    "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
-    "Content-Type": "application/json"
-}
+# =============================================================
+# INICIALIZAR GOOGLE SHEETS
+# =============================================================
+def get_google_sheets_client():
+    """Conectar con Google Sheets usando credenciales de servicio"""
+    try:
+        if not GOOGLE_SHEETS_CREDENTIALS:
+            print("⚠️ GOOGLE_SHEETS_CREDENTIALS no configurado")
+            return None
+
+        # Parsear credenciales desde variable de entorno
+        creds_dict = json.loads(GOOGLE_SHEETS_CREDENTIALS)
+
+        # Crear credenciales
+        scopes = [
+            'https://www.googleapis.com/auth/spreadsheets',
+            'https://www.googleapis.com/auth/drive'
+        ]
+        credentials = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+
+        # Conectar con Google Sheets
+        client = gspread.authorize(credentials)
+        return client
+    except Exception as e:
+        print(f"⚠️ Error conectando con Google Sheets: {e}")
+        return None
+
+def get_or_create_worksheet(client, sheet_name, worksheet_name, headers):
+    """Obtener o crear una hoja de trabajo con los encabezados especificados"""
+    try:
+        # Abrir o crear el spreadsheet
+        try:
+            spreadsheet = client.open(sheet_name)
+        except gspread.exceptions.SpreadsheetNotFound:
+            spreadsheet = client.create(sheet_name)
+            print(f"✅ Creado nuevo Google Sheet: {sheet_name}")
+
+        # Abrir o crear la worksheet
+        try:
+            worksheet = spreadsheet.worksheet(worksheet_name)
+        except gspread.exceptions.WorksheetNotFound:
+            worksheet = spreadsheet.add_worksheet(title=worksheet_name, rows=1000, cols=len(headers))
+            worksheet.append_row(headers)
+            print(f"✅ Creada nueva hoja: {worksheet_name}")
+
+        return worksheet
+    except Exception as e:
+        print(f"⚠️ Error obteniendo worksheet {worksheet_name}: {e}")
+        return None
 
 # =============================================================
 # INICIALIZAR FLASK
@@ -33,44 +76,46 @@ CORS(app)
 # RUTAS API (deben ir ANTES de las rutas estáticas)
 # =============================================================
 
-# ENDPOINT 1: /log  → guarda cada evento
+# ENDPOINT 1: /log  → guarda cada evento en Google Sheets
 @app.route("/log", methods=["POST"])
 def log_event():
     try:
         data = request.get_json(force=True)
-        data["ts"] = data.get("ts") or datetime.utcnow().isoformat()
+        timestamp = data.get("ts") or datetime.utcnow().isoformat()
 
-        payload = {
-            "subject_id": data.get("subject_id"),
-            "policy": data.get("policy"),
-            "event": data.get("event"),
-            "ts": data["ts"],
-            "trial_type": data.get("payload", {}).get("trial_type"),
-            "rt_ms": data.get("payload", {}).get("rt_ms"),
-            "clicks": data.get("payload", {}).get("clicks"),
-            "idle_ms": data.get("payload", {}).get("idle_ms"),
-            "suggestion_index": data.get("payload", {}).get("suggestion_index"),
-            "selection_chars": data.get("payload", {}).get("selection_chars"),
-            "words": data.get("payload", {}).get("words"),
-            "text_len": data.get("payload", {}).get("text_len"),
-            "payload": data.get("payload", {}),
-        }
+        # Conectar con Google Sheets
+        client = get_google_sheets_client()
+        if not client:
+            print("⚠️ Google Sheets no disponible, evento no guardado")
+            return jsonify({"ok": True, "inserted": False, "note": "Google Sheets no configurado"}), 200
 
-        # Inserta en shadowai.events
-        r = requests.post(
-            f"{SUPABASE_URL}/rest/v1/shadowai.events",
-            headers=SUPABASE_HEADERS,
-            data=json.dumps(payload)
-        )
-        r.raise_for_status()
+        # Headers para la hoja de eventos
+        headers = ["timestamp", "subject_id", "policy", "event", "payload_json"]
+        worksheet = get_or_create_worksheet(client, GOOGLE_SHEET_NAME, "events", headers)
+
+        if not worksheet:
+            return jsonify({"ok": False, "error": "No se pudo acceder a la hoja"}), 500
+
+        # Preparar fila
+        row = [
+            timestamp,
+            data.get("subject_id", ""),
+            data.get("policy", ""),
+            data.get("event", ""),
+            json.dumps(data.get("payload", {}))
+        ]
+
+        # Insertar fila
+        worksheet.append_row(row, value_input_option='RAW')
 
         return jsonify({"ok": True, "inserted": True}), 200
     except Exception as e:
         print("⚠️ Error en /log:", e)
-        return jsonify({"ok": False, "error": str(e)}), 500
+        # No fallar el experimento si Google Sheets falla
+        return jsonify({"ok": True, "inserted": False, "error": str(e)}), 200
 
 # =============================================================
-# ENDPOINT 2: /finalize  → guarda resumen final + demografía
+# ENDPOINT 2: /finalize  → guarda resumen final en Google Sheets
 # =============================================================
 @app.route("/finalize", methods=["POST"])
 def finalize():
@@ -80,60 +125,69 @@ def finalize():
         demographics = data.get("demographics", {})
         results = data.get("results", {})
 
-        # 1️⃣ Actualizar o insertar participante
-        participant_payload = {
-            "subject_id": subject_id,
-            "policy": demographics.get("policy"),
-            "dob": demographics.get("dob"),
-            "studies": demographics.get("studies"),
-            "grad_year": demographics.get("grad_year"),
-            "uni": demographics.get("uni"),
-            "field": demographics.get("field"),
-            "city": demographics.get("city"),
-            "gpa": demographics.get("gpa"),
-            "raw_demographics": demographics,
-            "last_seen": datetime.utcnow().isoformat()
-        }
+        # Conectar con Google Sheets
+        client = get_google_sheets_client()
+        if not client:
+            print("⚠️ Google Sheets no disponible, resultados no guardados")
+            return jsonify({"ok": True, "finalized": False, "note": "Google Sheets no configurado"}), 200
 
-        requests.post(
-            f"{SUPABASE_URL}/rest/v1/shadowai.participants",
-            headers={**SUPABASE_HEADERS, "Prefer": "resolution=merge-duplicates"},
-            data=json.dumps(participant_payload)
-        )
+        # Headers para la hoja de resultados
+        headers = [
+            "timestamp", "subject_id", "policy",
+            # Demográficos
+            "dob", "studies", "grad_year", "uni", "field", "city", "gpa",
+            # Tarea
+            "task_text", "words", "edit_count",
+            # Uso de IA
+            "ai_generated_pct", "ai_paraphrased_pct",
+            # Control
+            "noticed_policy", "used_ai_button", "used_external_ai",
+            # Personalidad
+            "personality_q1", "personality_q2", "personality_q3"
+        ]
+        worksheet = get_or_create_worksheet(client, GOOGLE_SHEET_NAME, "results", headers)
 
-        # 2️⃣ Insertar resultado final
-        results_payload = {
-            "subject_id": subject_id,
-            "policy": demographics.get("policy"),
-            "task_text": results.get("task_text"),
-            "words": results.get("words"),
-            "edit_count": len(results.get("edits", [])),
-            "ai_generated_pct": results.get("ai_usage", {}).get("generated_pct"),
-            "ai_paraphrased_pct": results.get("ai_usage", {}).get("paraphrased_pct"),
-            "control_noticed_policy": results.get("control", {}).get("noticed_policy"),
-            "control_used_ai_button": results.get("control", {}).get("used_ai_button"),
-            "control_used_external_ai": results.get("control", {}).get("used_external_ai"),
-            "control": results.get("control"),
-            "personality_q1": results.get("personality", {}).get("q1"),
-            "personality_q2": results.get("personality", {}).get("q2"),
-            "personality_q3": results.get("personality", {}).get("q3"),
-            "personality": results.get("personality"),
-            "edits": results.get("edits"),
-            "ai_usage": results.get("ai_usage"),
-            "demographics": demographics
-        }
+        if not worksheet:
+            return jsonify({"ok": False, "error": "No se pudo acceder a la hoja"}), 500
 
-        r2 = requests.post(
-            f"{SUPABASE_URL}/rest/v1/shadowai.results",
-            headers={**SUPABASE_HEADERS, "Prefer": "resolution=merge-duplicates"},
-            data=json.dumps(results_payload)
-        )
-        r2.raise_for_status()
+        # Preparar fila con todos los datos
+        row = [
+            datetime.utcnow().isoformat(),
+            subject_id,
+            demographics.get("policy", ""),
+            # Demográficos
+            demographics.get("dob", ""),
+            demographics.get("studies", ""),
+            demographics.get("grad_year", ""),
+            demographics.get("uni", ""),
+            demographics.get("field", ""),
+            demographics.get("city", ""),
+            demographics.get("gpa", ""),
+            # Tarea
+            results.get("task_text", ""),
+            results.get("words", 0),
+            len(results.get("edits", [])),
+            # Uso de IA
+            results.get("ai_usage", {}).get("generated_pct", 0),
+            results.get("ai_usage", {}).get("paraphrased_pct", 0),
+            # Control
+            results.get("control", {}).get("noticed_policy", ""),
+            results.get("control", {}).get("used_ai_button", ""),
+            results.get("control", {}).get("used_external_ai", ""),
+            # Personalidad
+            results.get("personality", {}).get("q1", ""),
+            results.get("personality", {}).get("q2", ""),
+            results.get("personality", {}).get("q3", "")
+        ]
+
+        # Insertar fila
+        worksheet.append_row(row, value_input_option='RAW')
 
         return jsonify({"ok": True, "finalized": True}), 200
     except Exception as e:
         print("⚠️ Error en /finalize:", e)
-        return jsonify({"ok": False, "error": str(e)}), 500
+        # No fallar el experimento si Google Sheets falla
+        return jsonify({"ok": True, "finalized": False, "error": str(e)}), 200
 
 # =============================================================
 # ENDPOINT 3: /ai-suggest  → sugerencia de IA con OpenAI
