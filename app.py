@@ -4,7 +4,7 @@
 
 import os, json, requests
 from datetime import datetime
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 
 # =============================================================
@@ -25,7 +25,7 @@ SUPABASE_HEADERS = {
 # =============================================================
 # INICIALIZAR FLASK
 # =============================================================
-app = Flask(__name__)
+app = Flask(__name__, static_folder='public', static_url_path='')
 CORS(app)
 
 # =============================================================
@@ -130,11 +130,21 @@ def finalize():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 # =============================================================
-# RAÍZ: mensaje de estado
+# RAÍZ: servir el experimento (index.html)
 # =============================================================
 @app.route("/")
 def home():
-    return "✅ Shadow AI backend activo y conectado a Supabase."
+    return send_from_directory('public', 'index.html')
+
+# Ruta para servir archivos estáticos (CSS, JS, etc.)
+@app.route("/<path:path>")
+def serve_static(path):
+    return send_from_directory('public', path)
+
+# Endpoint para verificar el estado del backend
+@app.route("/status")
+def status():
+    return jsonify({"status": "ok", "message": "✅ Shadow AI backend activo y conectado a Supabase."})
 
 # =============================================================
 # EJECUCIÓN LOCAL (solo si corres manualmente)
