@@ -108,6 +108,8 @@ def finalize():
             "task_text": results.get("task_text"),
             "words": results.get("words"),
             "edit_count": len(results.get("edits", [])),
+            "ai_generated_pct": results.get("ai_usage", {}).get("generated_pct"),
+            "ai_paraphrased_pct": results.get("ai_usage", {}).get("paraphrased_pct"),
             "control_noticed_policy": results.get("control", {}).get("noticed_policy"),
             "control_used_ai_button": results.get("control", {}).get("used_ai_button"),
             "control_used_external_ai": results.get("control", {}).get("used_external_ai"),
@@ -117,6 +119,7 @@ def finalize():
             "personality_q3": results.get("personality", {}).get("q3"),
             "personality": results.get("personality"),
             "edits": results.get("edits"),
+            "ai_usage": results.get("ai_usage"),
             "demographics": demographics
         }
 
