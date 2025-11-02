@@ -29,8 +29,10 @@ app = Flask(__name__, static_folder='public', static_url_path='')
 CORS(app)
 
 # =============================================================
-# ENDPOINT 1: /log  → guarda cada evento
+# RUTAS API (deben ir ANTES de las rutas estáticas)
 # =============================================================
+
+# ENDPOINT 1: /log  → guarda cada evento
 @app.route("/log", methods=["POST"])
 def log_event():
     try:
@@ -130,18 +132,18 @@ def finalize():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 # =============================================================
-# RAÍZ: sirve el experimento (index.html)
+# SERVIR ARCHIVOS ESTÁTICOS
 # =============================================================
-@app.route("/")
-def home():
-    return send_from_directory('public', 'index.html')
-
-# =============================================================
-# SERVIR ARCHIVOS ESTÁTICOS (CSS, JS, etc.)
-# =============================================================
+@app.route("/", defaults={"path": "index.html"})
 @app.route("/<path:path>")
 def serve_static(path):
-    return send_from_directory('public', path)
+    """Sirve archivos estáticos desde la carpeta public/"""
+    try:
+        return send_from_directory('public', path)
+    except Exception as e:
+        print(f"⚠️ Error sirviendo {path}:", e)
+        # Si el archivo no existe, devolver 404
+        return f"Archivo no encontrado: {path}", 404
 
 # =============================================================
 # EJECUCIÓN LOCAL (solo si corres manualmente)
