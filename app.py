@@ -8,12 +8,13 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 
 # =============================================================
-# CONFIGURACIÓN — PON AQUÍ TUS VARIABLES DE SUPABASE
+# CONFIGURACIÓN — PON AQUÍ TUS VARIABLES DE SUPABASE Y OPENAI
 # =============================================================
 import os
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # No toques lo de abajo
 SUPABASE_HEADERS = {
@@ -107,6 +108,8 @@ def finalize():
             "task_text": results.get("task_text"),
             "words": results.get("words"),
             "edit_count": len(results.get("edits", [])),
+            "ai_generated_pct": results.get("ai_usage", {}).get("generated_pct"),
+            "ai_paraphrased_pct": results.get("ai_usage", {}).get("paraphrased_pct"),
             "control_noticed_policy": results.get("control", {}).get("noticed_policy"),
             "control_used_ai_button": results.get("control", {}).get("used_ai_button"),
             "control_used_external_ai": results.get("control", {}).get("used_external_ai"),
@@ -116,6 +119,7 @@ def finalize():
             "personality_q3": results.get("personality", {}).get("q3"),
             "personality": results.get("personality"),
             "edits": results.get("edits"),
+            "ai_usage": results.get("ai_usage"),
             "demographics": demographics
         }
 
@@ -129,6 +133,54 @@ def finalize():
         return jsonify({"ok": True, "finalized": True}), 200
     except Exception as e:
         print("⚠️ Error en /finalize:", e)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+# =============================================================
+# ENDPOINT 3: /ai-suggest  → sugerencia de IA con OpenAI
+# =============================================================
+@app.route("/ai-suggest", methods=["POST"])
+def ai_suggest():
+    try:
+        data = request.get_json(force=True)
+        text = data.get("text", "")
+        selection = data.get("selection", "")
+        policy = data.get("policy", "")
+
+        # Construir prompt basado en contexto
+        if selection:
+            prompt = f"El usuario está escribiendo sobre cómo sus estudios le ayudarán en el futuro. Ha seleccionado este texto: '{selection}'. Proporciona una sugerencia breve (máximo 20 palabras) para mejorar o reescribir esta parte. Responde solo con la sugerencia, sin explicaciones adicionales."
+        else:
+            prompt = f"El usuario está escribiendo sobre cómo sus estudios le ayudarán en el futuro. Lleva escrito esto hasta ahora: '{text[:200]}...'. Proporciona una sugerencia breve (máximo 20 palabras) de qué podría añadir para enriquecer el texto. Responde solo con la sugerencia, sin explicaciones adicionales."
+
+        # Llamar a OpenAI API
+        openai_response = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "gpt-3.5-turbo",
+                "messages": [
+                    {"role": "system", "content": "Eres un asistente de escritura académica. Das sugerencias breves y útiles."},
+                    {"role": "user", "content": prompt}
+                ],
+                "max_tokens": 100,
+                "temperature": 0.7
+            },
+            timeout=10
+        )
+        openai_response.raise_for_status()
+
+        result = openai_response.json()
+        suggestion = result["choices"][0]["message"]["content"].strip()
+
+        return jsonify({"ok": True, "suggestion": suggestion}), 200
+
+    except requests.exceptions.Timeout:
+        return jsonify({"ok": False, "error": "OpenAI timeout"}), 504
+    except Exception as e:
+        print("⚠️ Error en /ai-suggest:", e)
         return jsonify({"ok": False, "error": str(e)}), 500
 
 # =============================================================
