@@ -146,11 +146,11 @@
 
   // ====== VARIABLES QUE RECOGEMOS A LO LARGO DEL FLUJO ======
   const store = {
-    dob: '', basicStudies: '', gradYear: null,
+    dob: '', sex: '', basicStudies: '', gradYear: null,
     intro_ack: true,
     task_text: '', task_edits: [],
     ai_usage: {},
-    control: {}, demographics: {}, personality: {}
+    control: {}, demographics: {}, personality: {}, ai_motivation: {}
   };
 
   // ====== PANTALLA 1 — Bienvenida y consentimiento ======
@@ -177,7 +177,7 @@
     on_load: () => sendLog('policy_assigned', { policy: assignedPolicy.key })
   };
 
-  // ====== PANTALLA 2 — Fecha nacimiento + estudios ======
+  // ====== PANTALLA 2 — Fecha nacimiento + sexo + estudios ======
   const s2 = {
     type: jsPsychSurveyHtmlForm,
     preamble: `<h2>Datos iniciales</h2>`,
@@ -188,6 +188,15 @@
         <input class="input" type="number" name="dob_month" placeholder="mm" min="1" max="12" required />
         <input class="input" type="number" name="dob_year" placeholder="aaaa" min="1900" max="2035" required />
       </div>
+
+      <label class="label">Sexo</label>
+      <select class="input" name="sex" required>
+        <option value="">Selecciona…</option>
+        <option>Hombre</option>
+        <option>Mujer</option>
+        <option>Prefiero no decirlo</option>
+        <option>Otro</option>
+      </select>
 
       <label class="label">Estudios superiores cursados</label>
       <select class="input" name="studies" id="studies" required>
@@ -215,14 +224,15 @@
     on_finish: async (data) => {
       const d = data.response;
       store.dob = `${d.dob_day}/${d.dob_month}/${d.dob_year}`;
+      store.sex = d.sex;
       store.basicStudies = d.studies;
       store.gradYear = d.grad_year ? Number(d.grad_year) : null;
-      await sendLog('demographics_basic', { dob: store.dob, studies: store.basicStudies, grad_year: store.gradYear });
+      await sendLog('demographics_basic', { dob: store.dob, sex: store.sex, studies: store.basicStudies, grad_year: store.gradYear });
     }
   };
 
   // ====== PANTALLA 3 — Introducción + política IA visible ======
-  const taskPrompt = 'Explica brevemente cómo los últimos estudios que has cursado te ayudarán en un futuro cercano o lejano y/o cómo tu labor puede contribuir a crear una sociedad mejor.';
+  const taskPrompt = 'Escribe sobre cómo tus estudios actuales te ayudarán en tu futuro profesional y/o personal. Puedes enfocarte en las competencias adquiridas, tus objetivos, o cualquier aspecto que consideres relevante.';
 
   const s3 = {
     type: jsPsychHtmlButtonResponse,
@@ -250,7 +260,7 @@
       <div>
         <h2>Tarea</h2>
         <p class="task-prompt"><em>${taskPrompt}</em></p>
-        <p>Redacta un texto entre <strong>150 y 300 palabras</strong>.</p>
+        <p>Redacta un texto entre <strong>90 y 300 palabras</strong>.</p>
         <textarea class="input" id="task_text" rows="10" placeholder="Escribe aquí…"></textarea>
         <div class="task-tools">
           ${assignedPolicy.showAIButton ? '<button id="ai_help" class="btn-outline" type="button">Ayuda de IA</button>' : ''}
@@ -261,7 +271,7 @@
     `,
     choices: ['Continuar'],
     on_load: () => {
-      // deshabilita botón "Continuar" hasta llegar a 150
+      // deshabilita botón "Continuar" hasta llegar a 90
       const contBtn = document.querySelector('.jspsych-btn');
       contBtn.disabled = true;
 
@@ -273,7 +283,7 @@
       const update = () => {
         const n = wordsOf(ta.value);
         wc.textContent = `${n} ${n===1?'palabra':'palabras'}`;
-        contBtn.disabled = !(n>=150 && n<=300);
+        contBtn.disabled = !(n>=90 && n<=300);
         editLog.push({ t: nowIso(), len: ta.value.length });
         // Guardar en store para que esté disponible en on_finish
         store.task_text = ta.value;
@@ -542,13 +552,45 @@
     }
   };
 
-  // ====== PANTALLA 8 — Gracias + subject_id + finalize ======
+  // ====== PANTALLA 7B — Motivaciones de uso de IA ======
+  const s7b = {
+    type: jsPsychSurveyMultiChoice,
+    preamble: `<h2>Actitudes hacia la IA</h2><p class="muted">Responde con sinceridad según tu experiencia.</p>`,
+    questions: [
+      { prompt: 'Creo que las herramientas de IA pueden hacer mi trabajo mejor de lo que yo lo haría solo/a.',
+        options: ['Totalmente en desacuerdo','En desacuerdo','De acuerdo','Totalmente de acuerdo'],
+        required:true, name:'overconfidence_1' },
+      { prompt: 'Confío plenamente en las respuestas que me da una IA sin necesidad de revisarlas.',
+        options: ['Totalmente en desacuerdo','En desacuerdo','De acuerdo','Totalmente de acuerdo'],
+        required:true, name:'overconfidence_2' },
+      { prompt: 'Uso herramientas de IA principalmente para ahorrar tiempo y esfuerzo.',
+        options: ['Totalmente en desacuerdo','En desacuerdo','De acuerdo','Totalmente de acuerdo'],
+        required:true, name:'self_motivation_1' },
+      { prompt: 'Uso IA porque me ayuda a sentirme más seguro/a con mis resultados.',
+        options: ['Totalmente en desacuerdo','En desacuerdo','De acuerdo','Totalmente de acuerdo'],
+        required:true, name:'self_motivation_2' },
+      { prompt: 'La mayoría de mis compañeros/as de estudios usan herramientas de IA regularmente.',
+        options: ['Totalmente en desacuerdo','En desacuerdo','De acuerdo','Totalmente de acuerdo'],
+        required:true, name:'social_acceptance_1' },
+      { prompt: 'Usar IA para tareas académicas es algo normal y aceptado en mi entorno.',
+        options: ['Totalmente en desacuerdo','En desacuerdo','De acuerdo','Totalmente de acuerdo'],
+        required:true, name:'social_acceptance_2' }
+    ],
+    button_label: 'Continuar',
+    on_finish: async (data) => {
+      store.ai_motivation = data.response;
+      await sendLog('ai_motivation_answers', store.ai_motivation);
+    }
+  };
+
+  // ====== PANTALLA 8 — Gracias + finalize ======
   const finalizeCall = {
     type: jsPsychCallFunction,
     async: true,
     func: async (done) => {
       const demographics = {
         dob: store.dob,
+        sex: store.sex,
         studies: store.basicStudies,
         grad_year: store.gradYear,
         ...store.demographics,
@@ -560,7 +602,8 @@
         edits: store.task_edits,
         ai_usage: store.ai_usage,
         control: store.control,
-        personality: store.personality
+        personality: store.personality,
+        ai_motivation: store.ai_motivation
       };
 
       // Debug: verificar que task_text tiene contenido
@@ -596,27 +639,20 @@
     type: jsPsychHtmlButtonResponse,
     stimulus: `
       <div class="center">
-        <h2>¡Gracias!</h2>
-        <p>Tu código de participante es:</p>
-        <p class="code">${subject_id}</p>
+        <h2>¡Gracias por participar!</h2>
+        <p>Tu respuesta ha sido guardada correctamente.</p>
         <p class="muted">
           Si deseas más información o retirar tus datos, escríbenos a
           <a href="mailto:pmartinmartinez@alu.comillas.edu">pmartinmartinez@alu.comillas.edu</a>.
         </p>
       </div>
     `,
-    choices: ['Copiar código'],
-    on_load: () => sendLog('thanks_screen'),
-    on_finish: async () => {
-      try {
-        await navigator.clipboard.writeText(subject_id);
-        alert('Código copiado.');
-      } catch {}
-    }
+    choices: ['Finalizar'],
+    on_load: () => sendLog('thanks_screen')
   };
 
   // ====== Timeline completo ======
-  const timeline = [s1, s2, s3, s4, s4b, s5, s6, s7, finalizeCall, s8];
+  const timeline = [s1, s2, s3, s4, s4b, s5, s6, s7, s7b, finalizeCall, s8];
 
   // ¡Comenzar!
   jsPsych.run(timeline);

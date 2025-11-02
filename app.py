@@ -153,7 +153,7 @@ def finalize():
         headers = [
             "timestamp", "subject_id", "policy",
             # Demográficos
-            "dob", "studies", "grad_year", "uni", "field", "city", "gpa",
+            "dob", "sex", "studies", "grad_year", "uni", "field", "city", "gpa",
             # Tarea
             "task_text", "words", "edit_count",
             # Uso de IA
@@ -161,7 +161,11 @@ def finalize():
             # Control
             "noticed_policy", "used_ai_button", "used_external_ai",
             # Personalidad
-            "personality_q1", "personality_q2", "personality_q3"
+            "personality_q1", "personality_q2", "personality_q3",
+            # Motivaciones de uso de IA
+            "ai_overconfidence_1", "ai_overconfidence_2",
+            "ai_self_motivation_1", "ai_self_motivation_2",
+            "ai_social_acceptance_1", "ai_social_acceptance_2"
         ]
         worksheet = get_or_create_worksheet(client, GOOGLE_SHEET_NAME, "results", headers)
 
@@ -175,6 +179,7 @@ def finalize():
             demographics.get("policy", ""),
             # Demográficos
             demographics.get("dob", ""),
+            demographics.get("sex", ""),
             demographics.get("studies", ""),
             demographics.get("grad_year", ""),
             demographics.get("uni", ""),
@@ -195,7 +200,14 @@ def finalize():
             # Personalidad
             results.get("personality", {}).get("q1", ""),
             results.get("personality", {}).get("q2", ""),
-            results.get("personality", {}).get("q3", "")
+            results.get("personality", {}).get("q3", ""),
+            # Motivaciones de uso de IA
+            results.get("ai_motivation", {}).get("overconfidence_1", ""),
+            results.get("ai_motivation", {}).get("overconfidence_2", ""),
+            results.get("ai_motivation", {}).get("self_motivation_1", ""),
+            results.get("ai_motivation", {}).get("self_motivation_2", ""),
+            results.get("ai_motivation", {}).get("social_acceptance_1", ""),
+            results.get("ai_motivation", {}).get("social_acceptance_2", "")
         ]
 
         # Insertar fila
