@@ -88,7 +88,11 @@
       trialClickCount = 0;
       lastClickAt = Date.now();
       startIdleWatch();
-      await sendLog('screen_enter', { index: jsPsych.getProgress().current_trial_global+1, trial_type: t.type });
+      // No enviar el objeto 't' completo porque tiene referencias circulares
+      await sendLog('screen_enter', {
+        index: jsPsych.getProgress().current_trial_global+1,
+        trial_type: t.type?.name || 'unknown'
+      });
       // contar clics dentro del trial
       document.addEventListener('click', clickBump, { once:false });
     },
@@ -247,6 +251,8 @@
         wc.textContent = `${n} ${n===1?'palabra':'palabras'}`;
         contBtn.disabled = !(n>=150 && n<=300);
         editLog.push({ t: nowIso(), len: ta.value.length });
+        // Guardar en store para que esté disponible en on_finish
+        store.task_text = ta.value;
       };
       ta.addEventListener('input', update);
       update();
@@ -319,12 +325,11 @@
       }
     },
     on_finish: async (data) => {
-      const txt = document.getElementById('task_text').value;
-      store.task_text = txt;
+      // El texto ya está en store.task_text gracias al update()
       store.task_edits = editLog.slice(-50);
       await sendLog('task_snapshot', {
-        words: wordsOf(txt),
-        text_len: txt.length,
+        words: wordsOf(store.task_text),
+        text_len: store.task_text.length,
         edits: store.task_edits
       });
     }
@@ -381,7 +386,91 @@
     preamble: `<h2>Datos demográficos</h2>`,
     html: `
       <label class="label">Universidad en la que has estudiado</label>
-      <input class="input" name="uni" placeholder="Ej: Universidad Pontificia Comillas" required />
+      <select class="input" name="uni" required>
+        <option value="">Selecciona…</option>
+        <optgroup label="Madrid">
+          <option>Universidad Complutense de Madrid (UCM)</option>
+          <option>Universidad Autónoma de Madrid (UAM)</option>
+          <option>Universidad Carlos III de Madrid (UC3M)</option>
+          <option>Universidad Politécnica de Madrid (UPM)</option>
+          <option>Universidad Pontificia Comillas (ICAI-ICADE)</option>
+          <option>Universidad Rey Juan Carlos (URJC)</option>
+          <option>Universidad de Alcalá (UAH)</option>
+          <option>Universidad Nacional de Educación a Distancia (UNED)</option>
+          <option>Universidad San Pablo CEU</option>
+          <option>Universidad Francisco de Vitoria</option>
+          <option>Universidad Antonio de Nebrija</option>
+          <option>Universidad Europea de Madrid</option>
+          <option>Universidad Camilo José Cela</option>
+          <option>Centro Universitario Villanueva</option>
+          <option>IE Universidad (Madrid)</option>
+        </optgroup>
+        <optgroup label="Barcelona">
+          <option>Universidad de Barcelona (UB)</option>
+          <option>Universidad Autónoma de Barcelona (UAB)</option>
+          <option>Universidad Politécnica de Cataluña (UPC)</option>
+          <option>Universidad Pompeu Fabra (UPF)</option>
+          <option>Universidad Ramon Llull</option>
+          <option>Universidad de Vic</option>
+          <option>Universitat Oberta de Catalunya (UOC)</option>
+        </optgroup>
+        <optgroup label="Valencia">
+          <option>Universidad de Valencia (UV)</option>
+          <option>Universidad Politécnica de Valencia (UPV)</option>
+          <option>Universidad Miguel Hernández de Elche</option>
+          <option>Universidad Jaume I de Castellón</option>
+          <option>Universidad Cardenal Herrera CEU</option>
+        </optgroup>
+        <optgroup label="Andalucía">
+          <option>Universidad de Sevilla (US)</option>
+          <option>Universidad de Granada (UGR)</option>
+          <option>Universidad de Málaga (UMA)</option>
+          <option>Universidad de Córdoba (UCO)</option>
+          <option>Universidad Pablo de Olavide</option>
+          <option>Universidad de Cádiz (UCA)</option>
+          <option>Universidad de Almería (UAL)</option>
+          <option>Universidad de Huelva (UHU)</option>
+          <option>Universidad de Jaén (UJA)</option>
+        </optgroup>
+        <optgroup label="País Vasco y Navarra">
+          <option>Universidad del País Vasco (UPV/EHU)</option>
+          <option>Universidad de Deusto</option>
+          <option>Universidad de Navarra</option>
+          <option>Universidad Pública de Navarra</option>
+          <option>Mondragon Unibertsitatea</option>
+        </optgroup>
+        <optgroup label="Castilla y León">
+          <option>Universidad de Salamanca (USAL)</option>
+          <option>Universidad de Valladolid (UVA)</option>
+          <option>Universidad de León (ULE)</option>
+          <option>Universidad de Burgos (UBU)</option>
+          <option>Universidad Pontificia de Salamanca</option>
+        </optgroup>
+        <optgroup label="Galicia">
+          <option>Universidad de Santiago de Compostela (USC)</option>
+          <option>Universidad de Vigo</option>
+          <option>Universidad de A Coruña (UDC)</option>
+        </optgroup>
+        <optgroup label="Resto de España">
+          <option>Universidad de Murcia (UM)</option>
+          <option>Universidad de Zaragoza (UNIZAR)</option>
+          <option>Universidad de Alicante (UA)</option>
+          <option>Universidad de Oviedo (UNIOVI)</option>
+          <option>Universidad de Cantabria (UC)</option>
+          <option>Universidad de Extremadura (UEX)</option>
+          <option>Universidad de La Rioja (UR)</option>
+          <option>Universidad de Castilla-La Mancha (UCLM)</option>
+          <option>Universidad de las Islas Baleares (UIB)</option>
+          <option>Universidad de La Laguna (ULL)</option>
+          <option>Universidad de Las Palmas de Gran Canaria (ULPGC)</option>
+        </optgroup>
+        <optgroup label="Otras">
+          <option>Universidad Internacional</option>
+          <option>Universidad Privada</option>
+          <option>Universidad Extranjera</option>
+          <option>Otra</option>
+        </optgroup>
+      </select>
 
       <label class="label">Rama de conocimiento de los últimos estudios</label>
       <select class="input" name="field" required>
