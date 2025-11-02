@@ -15,7 +15,7 @@
     {
       key:'permisiva',
       label:'Permisiva',
-      description: 'Puedes usar libremente cualquier herramienta de inteligencia artificial para ayudarte en esta tarea. No hay restricciones sobre cómo o cuánto la utilizas.',
+      description: 'Puedes usar libremente cualquier herramienta de inteligencia artificial para ayudarte en esta tarea, siempre que lo declares al finalizar.',
       showAIButton: true
     },
     {
@@ -121,6 +121,7 @@
     dob: '', basicStudies: '', gradYear: null,
     intro_ack: true,
     task_text: '', task_edits: [],
+    ai_usage: {},
     control: {}, demographics: {}, personality: {}
   };
 
@@ -329,6 +330,32 @@
     }
   };
 
+  // ====== PANTALLA 4B — Declaración de uso de IA ======
+  const s4b = {
+    type: jsPsychSurveyHtmlForm,
+    preamble: `
+      <h2>Declaración de uso de IA</h2>
+      <p>Por favor, indica de manera honesta qué porcentaje de tu texto fue asistido por inteligencia artificial.</p>
+    `,
+    html: `
+      <label class="label">¿Qué porcentaje del texto está 100% generado por IA? (0-100%)</label>
+      <input class="input" type="number" name="ai_generated_pct" min="0" max="100" value="0" required />
+      <p class="muted" style="margin-top:4px;">Texto copiado directamente de una IA sin modificaciones</p>
+
+      <label class="label" style="margin-top:20px;">¿Qué porcentaje del texto está parafraseado por IA? (0-100%)</label>
+      <input class="input" type="number" name="ai_paraphrased_pct" min="0" max="100" value="0" required />
+      <p class="muted" style="margin-top:4px;">Texto que tomaste de una IA pero modificaste o reformulaste</p>
+    `,
+    button_label: 'Continuar',
+    on_finish: async (data) => {
+      store.ai_usage = {
+        generated_pct: Number(data.response.ai_generated_pct),
+        paraphrased_pct: Number(data.response.ai_paraphrased_pct)
+      };
+      await sendLog('ai_usage_declaration', store.ai_usage);
+    }
+  };
+
   // ====== PANTALLA 5 — Control ======
   const s5 = {
     type: jsPsychSurveyMultiChoice,
@@ -418,6 +445,7 @@
         task_text: store.task_text,
         words: wordsOf(store.task_text),
         edits: store.task_edits,
+        ai_usage: store.ai_usage,
         control: store.control,
         personality: store.personality
       };
@@ -463,7 +491,7 @@
   };
 
   // ====== Timeline completo ======
-  const timeline = [s1, s2, s3, s4, s5, s6, s7, finalizeCall, s8];
+  const timeline = [s1, s2, s3, s4, s4b, s5, s6, s7, finalizeCall, s8];
 
   // ¡Comenzar!
   jsPsych.run(timeline);
