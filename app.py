@@ -89,12 +89,23 @@ def log_event():
             print("⚠️ Google Sheets no disponible, evento no guardado")
             return jsonify({"ok": True, "inserted": False, "note": "Google Sheets no configurado"}), 200
 
-        # Headers para la hoja de eventos
-        headers = ["timestamp", "subject_id", "policy", "event", "payload_json"]
+        # Headers para la hoja de eventos (incluye más detalles para análisis)
+        headers = ["timestamp", "subject_id", "policy", "event", "trial_index", "time_on_screen_sec", "element_clicked", "payload_json"]
         worksheet = get_or_create_worksheet(client, GOOGLE_SHEET_NAME, "events", headers)
 
         if not worksheet:
             return jsonify({"ok": False, "error": "No se pudo acceder a la hoja"}), 500
+
+        # Extraer información útil del payload para columnas separadas
+        payload = data.get("payload", {})
+        trial_index = payload.get("trial_index", "")
+        time_on_screen_sec = payload.get("time_on_screen_seconds", "")
+
+        # Para clicks, extraer info del elemento
+        element_clicked = ""
+        if data.get("event") == "click" and "element" in payload:
+            elem = payload.get("element", {})
+            element_clicked = f"{elem.get('tag', '')}#{elem.get('id', '')} .{elem.get('class', '')}"
 
         # Preparar fila
         row = [
@@ -102,7 +113,10 @@ def log_event():
             data.get("subject_id", ""),
             data.get("policy", ""),
             data.get("event", ""),
-            json.dumps(data.get("payload", {}))
+            trial_index,
+            time_on_screen_sec,
+            element_clicked,
+            json.dumps(payload)
         ]
 
         # Insertar fila
@@ -125,6 +139,10 @@ def finalize():
         demographics = data.get("demographics", {})
         results = data.get("results", {})
 
+        # Debug: Log task_text length
+        task_text = results.get("task_text", "")
+        print(f"📝 Finalizando participante {subject_id}: task_text length = {len(task_text)} caracteres, {results.get('words', 0)} palabras")
+
         # Conectar con Google Sheets
         client = get_google_sheets_client()
         if not client:
@@ -135,7 +153,7 @@ def finalize():
         headers = [
             "timestamp", "subject_id", "policy",
             # Demográficos
-            "dob", "studies", "grad_year", "uni", "field", "city", "gpa",
+            "dob", "sex", "studies", "grad_year", "uni", "field", "city", "gpa",
             # Tarea
             "task_text", "words", "edit_count",
             # Uso de IA
@@ -143,7 +161,11 @@ def finalize():
             # Control
             "noticed_policy", "used_ai_button", "used_external_ai",
             # Personalidad
-            "personality_q1", "personality_q2", "personality_q3"
+            "personality_q1", "personality_q2", "personality_q3",
+            # Motivaciones de uso de IA
+            "ai_overconfidence_1", "ai_overconfidence_2",
+            "ai_self_motivation_1", "ai_self_motivation_2",
+            "ai_social_acceptance_1", "ai_social_acceptance_2"
         ]
         worksheet = get_or_create_worksheet(client, GOOGLE_SHEET_NAME, "results", headers)
 
@@ -157,14 +179,15 @@ def finalize():
             demographics.get("policy", ""),
             # Demográficos
             demographics.get("dob", ""),
+            demographics.get("sex", ""),
             demographics.get("studies", ""),
             demographics.get("grad_year", ""),
             demographics.get("uni", ""),
             demographics.get("field", ""),
             demographics.get("city", ""),
             demographics.get("gpa", ""),
-            # Tarea
-            results.get("task_text", ""),
+            # Tarea (task_text es la variable que definimos arriba)
+            task_text,  # El texto completo de la tarea
             results.get("words", 0),
             len(results.get("edits", [])),
             # Uso de IA
@@ -177,7 +200,14 @@ def finalize():
             # Personalidad
             results.get("personality", {}).get("q1", ""),
             results.get("personality", {}).get("q2", ""),
-            results.get("personality", {}).get("q3", "")
+            results.get("personality", {}).get("q3", ""),
+            # Motivaciones de uso de IA
+            results.get("ai_motivation", {}).get("overconfidence_1", ""),
+            results.get("ai_motivation", {}).get("overconfidence_2", ""),
+            results.get("ai_motivation", {}).get("self_motivation_1", ""),
+            results.get("ai_motivation", {}).get("self_motivation_2", ""),
+            results.get("ai_motivation", {}).get("social_acceptance_1", ""),
+            results.get("ai_motivation", {}).get("social_acceptance_2", "")
         ]
 
         # Insertar fila
