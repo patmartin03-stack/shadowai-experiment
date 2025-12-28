@@ -314,12 +314,50 @@
               })
             });
 
+            // Validar código de respuesta
             if (!response.ok) {
-              throw new Error('Error al obtener sugerencia');
+              let errorMessage = 'Error al obtener sugerencia';
+              try {
+                const errorData = await response.json();
+                if (errorData && errorData.error) {
+                  errorMessage = errorData.error;
+                }
+              } catch (e) {
+                // Si no se puede parsear el error, usar mensaje genérico
+              }
+              throw new Error(errorMessage);
             }
 
-            const result = await response.json();
-            const suggestion = result.suggestion;
+            // Parsear JSON con validación
+            let result;
+            try {
+              result = await response.json();
+            } catch (e) {
+              console.error('Error parseando JSON de respuesta:', e);
+              throw new Error('Respuesta inválida del servidor');
+            }
+
+            // Validar estructura de respuesta
+            if (!result || typeof result !== 'object') {
+              console.error('Respuesta no es un objeto:', result);
+              throw new Error('Respuesta inválida del servidor');
+            }
+
+            if (!result.ok) {
+              const errorMessage = result.error || 'Error desconocido';
+              throw new Error(errorMessage);
+            }
+
+            if (!result.suggestion || typeof result.suggestion !== 'string') {
+              console.error('Respuesta sin sugerencia válida:', result);
+              throw new Error('El servidor no devolvió una sugerencia válida');
+            }
+
+            const suggestion = result.suggestion.trim();
+
+            if (!suggestion) {
+              throw new Error('La sugerencia está vacía');
+            }
 
             // Mostrar sugerencia como botón clickeable
             panel.innerHTML = `
@@ -584,6 +622,67 @@
   };
 
   // ====== PANTALLA 8 — Gracias + finalize ======
+  // Función auxiliar para reintentar con backoff exponencial
+  async function fetchWithRetry(url, options, maxRetries = 3) {
+    let lastError;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const response = await fetch(url, options);
+
+        // Validar respuesta
+        if (!response.ok) {
+          let errorMessage = `HTTP error ${response.status}`;
+          try {
+            const errorData = await response.json();
+            if (errorData && errorData.error) {
+              errorMessage = errorData.error;
+            }
+          } catch (e) {
+            // No se pudo parsear el error
+          }
+
+          // Si es un error del servidor (5xx) o servicio no disponible, reintentar
+          if (response.status >= 500 || response.status === 503) {
+            throw new Error(errorMessage);
+          } else {
+            // Error del cliente (4xx), no reintentar
+            return { ok: false, error: errorMessage, response };
+          }
+        }
+
+        // Parsear JSON con validación
+        let result;
+        try {
+          result = await response.json();
+        } catch (e) {
+          console.error('Error parseando JSON de respuesta:', e);
+          throw new Error('Respuesta inválida del servidor');
+        }
+
+        // Validar estructura de respuesta
+        if (!result || typeof result !== 'object') {
+          console.error('Respuesta no es un objeto:', result);
+          throw new Error('Respuesta inválida del servidor');
+        }
+
+        return { ok: true, data: result, response };
+      } catch (error) {
+        lastError = error;
+        console.warn(`⚠️ Intento ${attempt + 1}/${maxRetries} falló:`, error.message);
+
+        // Si no es el último intento, esperar antes de reintentar
+        if (attempt < maxRetries - 1) {
+          const delay = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
+          console.log(`⏳ Esperando ${delay}ms antes de reintentar...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+
+    // Todos los intentos fallaron
+    return { ok: false, error: lastError?.message || 'Error desconocido' };
+  }
+
   const finalizeCall = {
     type: jsPsychCallFunction,
     async: true,
@@ -613,24 +712,32 @@
         subject_id: subject_id
       });
 
-      try {
-        const response = await fetch('/finalize', {
-          method:'POST',
-          headers:{ 'Content-Type':'application/json' },
-          body: JSON.stringify({ subject_id, demographics, results })
-        });
-        if (!response.ok) {
-          console.warn('⚠️ Finalize failed:', response.status);
-          const errorText = await response.text();
-          console.warn('⚠️ Error details:', errorText);
-        } else {
+      // Intentar enviar con reintentos
+      const result = await fetchWithRetry('/finalize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subject_id, demographics, results })
+      }, 3); // 3 intentos máximo
+
+      if (result.ok) {
+        if (result.data && result.data.finalized) {
           console.log('✅ Datos guardados correctamente');
+        } else {
+          console.warn('⚠️ Respuesta exitosa pero datos posiblemente no guardados:', result.data);
         }
-      } catch (err) {
-        console.warn('⚠️ Finalize network error:', err.message);
+      } else {
+        console.error('❌ Error crítico: No se pudieron guardar los datos después de 3 intentos');
+        console.error('   Error:', result.error);
+        // En un escenario de producción, podrías mostrar un mensaje al usuario
+        // o guardar los datos localmente para recuperación posterior
       }
-      // Siempre continuar, incluso si falla
-      await sendLog('finalize_sent', { ok:true }).catch(() => {});
+
+      // Registrar intento de finalización
+      await sendLog('finalize_sent', {
+        success: result.ok,
+        error: result.ok ? null : result.error
+      }).catch(() => {});
+
       done();
     }
   };
