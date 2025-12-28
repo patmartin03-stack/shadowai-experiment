@@ -140,13 +140,17 @@ def get_or_create_worksheet(client, sheet_name, worksheet_name, headers):
             return None
 
         # Abrir o crear la worksheet
+        worksheet_exists = False
         try:
             worksheet = spreadsheet.worksheet(worksheet_name)
+            worksheet_exists = True
         except gspread.exceptions.WorksheetNotFound:
             try:
                 worksheet = spreadsheet.add_worksheet(title=worksheet_name, rows=1000, cols=len(headers))
-                worksheet.append_row(headers, value_input_option='RAW')
-                print(f"✅ Creada nueva hoja: {worksheet_name}")
+                # Usar update para poner headers específicamente en la fila 1
+                worksheet.update('A1', [headers], value_input_option='RAW')
+                print(f"✅ Creada nueva hoja: {worksheet_name} con encabezados")
+                return worksheet
             except gspread.exceptions.APIError as e:
                 print(f"⚠️ ERROR: Error de API al crear worksheet '{worksheet_name}': {e}")
                 return None
@@ -160,11 +164,61 @@ def get_or_create_worksheet(client, sheet_name, worksheet_name, headers):
             print(f"⚠️ ERROR: No se pudo acceder a worksheet '{worksheet_name}': {type(e).__name__}: {e}")
             return None
 
+        # Si la worksheet ya existía, verificar que tenga encabezados
+        if worksheet_exists:
+            try:
+                # Verificar si la primera fila está vacía o no coincide con los headers esperados
+                first_row = worksheet.row_values(1)
+
+                print(f"🔍 Verificando worksheet '{worksheet_name}':")
+                print(f"   - Primera fila actual: {first_row[:3] if first_row else '(vacía)'}...")
+                print(f"   - Headers esperados: {headers[:3]}...")
+
+                if not first_row or all(cell == '' for cell in first_row) or first_row != headers:
+                    # La primera fila está vacía o los headers no coinciden
+                    print(f"⚠️ WARNING: Worksheet '{worksheet_name}' necesita encabezados")
+
+                    # Usar update para escribir ESPECÍFICAMENTE en la fila 1
+                    try:
+                        worksheet.update('A1', [headers], value_input_option='RAW')
+                        print(f"✅ Encabezados actualizados en fila 1 de '{worksheet_name}'")
+                    except Exception as update_error:
+                        print(f"⚠️ ERROR actualizando headers: {type(update_error).__name__}: {update_error}")
+                else:
+                    print(f"✅ Hoja '{worksheet_name}' ya tiene encabezados correctos")
+
+            except gspread.exceptions.APIError as e:
+                print(f"⚠️ WARNING: No se pudo verificar encabezados de '{worksheet_name}': {e}")
+                # Continuar de todos modos
+            except Exception as e:
+                print(f"⚠️ WARNING: Error verificando encabezados de '{worksheet_name}': {type(e).__name__}: {e}")
+                # Continuar de todos modos
+
         return worksheet
 
     except Exception as e:
         print(f"⚠️ ERROR inesperado obteniendo worksheet '{worksheet_name}': {type(e).__name__}: {e}")
         return None
+
+# =============================================================
+# FUNCIONES AUXILIARES PARA GOOGLE SHEETS
+# =============================================================
+def sanitize_for_sheets(value):
+    """
+    Sanitiza un valor para Google Sheets, preservando el contenido pero evitando problemas de formato.
+    - Convierte None a string vacío
+    - Convierte números y booleanos a su representación de string
+    - Para strings, preserva saltos de línea y caracteres especiales
+    """
+    if value is None:
+        return ""
+    if isinstance(value, (int, float, bool)):
+        return value  # Google Sheets maneja estos nativamente
+    if not isinstance(value, str):
+        return str(value)
+
+    # Para strings, retornar tal cual - Google Sheets API maneja el escaping automáticamente
+    return value
 
 # =============================================================
 # INICIALIZAR FLASK
@@ -198,6 +252,11 @@ def log_event():
             return jsonify({"ok": True, "inserted": False, "error": "JSON vacío"}), 200
 
         timestamp = data.get("ts") or datetime.utcnow().isoformat()
+        event_type = data.get("event", "unknown")
+        subject_id = data.get("subject_id", "unknown")
+
+        # Log cada evento recibido para debugging
+        print(f"📊 /log recibido: event={event_type}, subject={subject_id[:8]}...")
 
         # Conectar con Google Sheets
         client = get_google_sheets_client()
@@ -207,11 +266,15 @@ def log_event():
 
         # Headers para la hoja de eventos (incluye más detalles para análisis)
         headers = ["timestamp", "subject_id", "policy", "event", "trial_index", "time_on_screen_sec", "element_clicked", "payload_json"]
+
+        print(f"   📋 Obteniendo worksheet 'events' para evento '{event_type}'...")
         worksheet = get_or_create_worksheet(client, GOOGLE_SHEET_NAME, "events", headers)
 
         if not worksheet:
-            print("⚠️ ERROR: No se pudo obtener worksheet 'events'")
+            print(f"   ❌ ERROR: No se pudo obtener worksheet 'events' para evento '{event_type}'")
             return jsonify({"ok": True, "inserted": False, "error": "No se pudo acceder a la hoja"}), 200
+
+        print(f"   📋 Worksheet 'events' obtenido correctamente")
 
         # Extraer información útil del payload para columnas separadas
         payload = data.get("payload", {})
@@ -237,15 +300,19 @@ def log_event():
             json.dumps(payload) if payload else "{}"
         ]
 
+        # Log de la fila que se va a insertar
+        print(f"   💾 Insertando fila en 'events': {len(row)} columnas, evento='{event_type}'")
+
         # Insertar fila con manejo de errores de API
         try:
             worksheet.append_row(row, value_input_option='RAW')
+            print(f"   ✅ Evento '{event_type}' guardado exitosamente en Google Sheets")
             return jsonify({"ok": True, "inserted": True}), 200
         except gspread.exceptions.APIError as e:
-            print(f"⚠️ ERROR de API en /log: {e}")
+            print(f"⚠️ ERROR de API en /log para evento '{event_type}': {e}")
             return jsonify({"ok": True, "inserted": False, "error": f"API error: {str(e)}"}), 200
         except Exception as e:
-            print(f"⚠️ ERROR insertando fila en /log: {type(e).__name__}: {e}")
+            print(f"⚠️ ERROR insertando fila en /log para evento '{event_type}': {type(e).__name__}: {e}")
             return jsonify({"ok": True, "inserted": False, "error": str(e)}), 200
 
     except Exception as e:
@@ -292,9 +359,14 @@ def finalize():
             print("⚠️ ERROR en /finalize: results debe ser un objeto")
             results = {}
 
-        # Debug: Log task_text length
+        # Debug: Log task_text length y preview
         task_text = results.get("task_text", "")
-        print(f"📝 Finalizando participante {subject_id}: task_text length = {len(task_text)} caracteres, {results.get('words', 0)} palabras")
+        has_newlines = '\n' in task_text
+        print(f"📝 Finalizando participante {subject_id}:")
+        print(f"   - task_text length: {len(task_text)} caracteres")
+        print(f"   - words: {results.get('words', 0)} palabras")
+        print(f"   - task_text preview (primeros 100 chars): {task_text[:100] if task_text else '(vacío)'}")
+        print(f"   - task_text tiene saltos de línea: {'Sí' if has_newlines else 'No'}")
 
         # Conectar con Google Sheets
         client = get_google_sheets_client()
