@@ -167,6 +167,26 @@ def get_or_create_worksheet(client, sheet_name, worksheet_name, headers):
         return None
 
 # =============================================================
+# FUNCIONES AUXILIARES PARA GOOGLE SHEETS
+# =============================================================
+def sanitize_for_sheets(value):
+    """
+    Sanitiza un valor para Google Sheets, preservando el contenido pero evitando problemas de formato.
+    - Convierte None a string vacío
+    - Convierte números y booleanos a su representación de string
+    - Para strings, preserva saltos de línea y caracteres especiales
+    """
+    if value is None:
+        return ""
+    if isinstance(value, (int, float, bool)):
+        return value  # Google Sheets maneja estos nativamente
+    if not isinstance(value, str):
+        return str(value)
+
+    # Para strings, retornar tal cual - Google Sheets API maneja el escaping automáticamente
+    return value
+
+# =============================================================
 # INICIALIZAR FLASK
 # =============================================================
 app = Flask(__name__, static_folder='public', static_url_path='')
@@ -292,9 +312,13 @@ def finalize():
             print("⚠️ ERROR en /finalize: results debe ser un objeto")
             results = {}
 
-        # Debug: Log task_text length
+        # Debug: Log task_text length y preview
         task_text = results.get("task_text", "")
-        print(f"📝 Finalizando participante {subject_id}: task_text length = {len(task_text)} caracteres, {results.get('words', 0)} palabras")
+        print(f"📝 Finalizando participante {subject_id}:")
+        print(f"   - task_text length: {len(task_text)} caracteres")
+        print(f"   - words: {results.get('words', 0)} palabras")
+        print(f"   - task_text preview (primeros 100 chars): {task_text[:100] if task_text else '(vacío)'}")
+        print(f"   - task_text tiene saltos de línea: {'Sí' if '\\n' in task_text else 'No'}")
 
         # Conectar con Google Sheets
         client = get_google_sheets_client()
