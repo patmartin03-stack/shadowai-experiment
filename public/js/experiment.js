@@ -150,7 +150,11 @@
     intro_ack: true,
     task_text: '', task_edits: [],
     ai_usage: {},
-    control: {}, demographics: {}, personality: {}, ai_motivation: {}
+    control: {}, demographics: {}, personality: {}, ai_motivation: {},
+    // Tracking de uso de IA y copy/paste
+    ai_text_inserted: 0,  // Caracteres insertados desde sugerencias de IA
+    paste_count: 0,       // Número de veces que se pegó texto
+    paste_total_chars: 0  // Total de caracteres pegados
   };
 
   // ====== PANTALLA 1 — Bienvenida y consentimiento ======
@@ -291,6 +295,38 @@
       ta.addEventListener('input', update);
       update();
 
+      // Tracking de copy/paste
+      ta.addEventListener('paste', (e) => {
+        const pastedText = (e.clipboardData || window.clipboardData).getData('text');
+        const pastedLength = pastedText.length;
+        store.paste_count += 1;
+        store.paste_total_chars += pastedLength;
+        sendLog('paste', {
+          paste_count: store.paste_count,
+          chars_pasted: pastedLength,
+          total_chars_pasted: store.paste_total_chars,
+          text_preview: pastedText.slice(0, 50)  // Primeros 50 caracteres del texto pegado
+        }).catch(() => {});
+      });
+
+      // Tracking de copy
+      ta.addEventListener('copy', (e) => {
+        const selectedText = ta.value.substring(ta.selectionStart, ta.selectionEnd);
+        sendLog('copy', {
+          chars_copied: selectedText.length,
+          text_preview: selectedText.slice(0, 50)
+        }).catch(() => {});
+      });
+
+      // Tracking de cut
+      ta.addEventListener('cut', (e) => {
+        const selectedText = ta.value.substring(ta.selectionStart, ta.selectionEnd);
+        sendLog('cut', {
+          chars_cut: selectedText.length,
+          text_preview: selectedText.slice(0, 50)
+        }).catch(() => {});
+      });
+
       // Solo si el botón existe (no en política restrictiva)
       if (help) {
         help.addEventListener('click', async () => {
@@ -370,17 +406,28 @@
 
             // Al hacer click, insertar la sugerencia
             panel.querySelector('.ai-chip').addEventListener('click', () => {
+              const insertedChars = suggestion.length;
+              store.ai_text_inserted += insertedChars;
+
               if (selection) {
                 // Reemplazar selección
                 ta.setRangeText(suggestion, start, end, 'end');
               } else {
                 // Añadir al final
                 const prefix = ta.value.endsWith('\n') || ta.value === '' ? '' : '\n';
-                ta.setRangeText(prefix + suggestion, ta.value.length, ta.value.length, 'end');
+                const textToInsert = prefix + suggestion;
+                ta.setRangeText(textToInsert, ta.value.length, ta.value.length, 'end');
               }
               ta.dispatchEvent(new Event('input'));
               panel.classList.add('hidden');
-              sendLog('ai_help_use', { suggestion: suggestion, selection_chars: selection.length });
+
+              sendLog('ai_text_inserted', {
+                suggestion: suggestion,
+                chars_inserted: insertedChars,
+                total_ai_chars: store.ai_text_inserted,
+                selection_chars: selection.length,
+                replaced_selection: selection.length > 0
+              }).catch(() => {});
             });
 
             sendLog('ai_help_open', { has_selection: selection.length > 0 });
@@ -399,10 +446,24 @@
     on_finish: async (data) => {
       // El texto ya está en store.task_text gracias al update()
       store.task_edits = editLog.slice(-50);
+      const totalChars = store.task_text.length;
+      const aiPercentage = totalChars > 0 ? ((store.ai_text_inserted / totalChars) * 100).toFixed(2) : 0;
+      const pastePercentage = totalChars > 0 ? ((store.paste_total_chars / totalChars) * 100).toFixed(2) : 0;
+
       await sendLog('task_snapshot', {
         words: wordsOf(store.task_text),
-        text_len: store.task_text.length,
-        edits: store.task_edits
+        text_len: totalChars,
+        edits: store.task_edits,
+        // Estadísticas de uso de IA
+        ai_chars_inserted: store.ai_text_inserted,
+        ai_percentage: parseFloat(aiPercentage),
+        // Estadísticas de copy/paste
+        paste_count: store.paste_count,
+        paste_total_chars: store.paste_total_chars,
+        paste_percentage: parseFloat(pastePercentage),
+        // Estadística derivada
+        manual_chars: totalChars - store.ai_text_inserted - store.paste_total_chars,
+        manual_percentage: Math.max(0, 100 - parseFloat(aiPercentage) - parseFloat(pastePercentage)).toFixed(2)
       });
     }
   };

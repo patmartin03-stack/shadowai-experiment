@@ -250,6 +250,11 @@ def log_event():
             return jsonify({"ok": True, "inserted": False, "error": "JSON vacío"}), 200
 
         timestamp = data.get("ts") or datetime.utcnow().isoformat()
+        event_type = data.get("event", "unknown")
+        subject_id = data.get("subject_id", "unknown")
+
+        # Log cada evento recibido para debugging
+        print(f"📊 /log recibido: event={event_type}, subject={subject_id[:8]}...")
 
         # Conectar con Google Sheets
         client = get_google_sheets_client()
@@ -292,12 +297,13 @@ def log_event():
         # Insertar fila con manejo de errores de API
         try:
             worksheet.append_row(row, value_input_option='RAW')
+            print(f"   ✅ Evento '{event_type}' guardado en Google Sheets")
             return jsonify({"ok": True, "inserted": True}), 200
         except gspread.exceptions.APIError as e:
-            print(f"⚠️ ERROR de API en /log: {e}")
+            print(f"⚠️ ERROR de API en /log para evento '{event_type}': {e}")
             return jsonify({"ok": True, "inserted": False, "error": f"API error: {str(e)}"}), 200
         except Exception as e:
-            print(f"⚠️ ERROR insertando fila en /log: {type(e).__name__}: {e}")
+            print(f"⚠️ ERROR insertando fila en /log para evento '{event_type}': {type(e).__name__}: {e}")
             return jsonify({"ok": True, "inserted": False, "error": str(e)}), 200
 
     except Exception as e:
