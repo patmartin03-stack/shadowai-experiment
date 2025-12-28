@@ -271,6 +271,14 @@
           <span id="word_count" class="muted">0 palabras</span>
         </div>
         <div id="ai_suggestions" class="suggestions hidden"></div>
+
+        <!-- Pie de página con recordatorio de política de IA -->
+        <div style="margin-top: 24px; padding: 12px; background-color: #f5f5f5; border-radius: 6px; border-left: 3px solid #666;">
+          <p style="margin: 0; font-size: 0.85em; color: #555;">
+            <strong>Recordatorio - Política de IA asignada:</strong><br>
+            ${assignedPolicy.description}
+          </p>
+        </div>
       </div>
     `,
     choices: ['Continuar'],
@@ -629,20 +637,40 @@
     }
   };
 
-  // ====== PANTALLA 7 — Personalidad / behavioural ======
+  // ====== PANTALLA 7 — Preguntas de Behavioral Economics ======
+  // IMPORTANTE: Estas preguntas miden aspectos conductuales relacionados con:
+  // - Cumplimiento de normas (rule-following behavior)
+  // - Planning fallacy (sesgo en estimación de tiempo)
+  // - Adopción de tecnología (technology acceptance)
+  //
+  // Para modificar estas preguntas, edita el array 'questions' a continuación.
+  // Mantén la estructura: { prompt: "pregunta", options: [...], required: true, name: "q1" }
+
   const s7 = {
     type: jsPsychSurveyMultiChoice,
     preamble: `<h2>Cuestionario de personalidad</h2><p class="muted">Selecciona la opción que mejor te representa.</p>`,
     questions: [
-      { prompt: 'Cuando una norma me parece injusta, tiendo a no cumplirla.',
-        options: ['Totalmente en desacuerdo','En desacuerdo','De acuerdo','Totalmente de acuerdo'],
-        required:true, name:'q1' },
-      { prompt: 'Suelo subestimar el tiempo que me llevará completar una tarea.',
-        options: ['Nunca','A veces','A menudo','Siempre'],
-        required:true, name:'q2' },
-      { prompt: 'Me siento cómodo/a pidiendo ayuda a herramientas digitales.',
-        options: ['Nada','Poco','Bastante','Mucho'],
-        required:true, name:'q3' }
+      // Pregunta 1: Cumplimiento de normas (Rule-following behavior)
+      {
+        prompt: 'Cuando una norma me parece injusta, tiendo a no cumplirla.',
+        options: ['Totalmente en desacuerdo', 'En desacuerdo', 'Neutral', 'De acuerdo', 'Totalmente de acuerdo'],
+        required: true,
+        name: 'q1'
+      },
+      // Pregunta 2: Planning fallacy (sesgo de estimación de tiempo)
+      {
+        prompt: 'Suelo subestimar el tiempo que me llevará completar una tarea.',
+        options: ['Nunca', 'Rara vez', 'A veces', 'A menudo', 'Siempre'],
+        required: true,
+        name: 'q2'
+      },
+      // Pregunta 3: Adopción de tecnología (Technology acceptance)
+      {
+        prompt: 'Me siento cómodo/a pidiendo ayuda a herramientas digitales.',
+        options: ['Nada', 'Poco', 'Moderadamente', 'Bastante', 'Mucho'],
+        required: true,
+        name: 'q3'
+      }
     ],
     button_label: 'Continuar',
     on_finish: async (data) => {
@@ -651,29 +679,78 @@
     }
   };
 
-  // ====== PANTALLA 7B — Motivaciones de uso de IA ======
+  // ====== PANTALLA 7B — Motivaciones de Uso de IA (Behavioral Economics) ======
+  // IMPORTANTE: Estas preguntas miden constructos de economía del comportamiento:
+  //
+  // OVERCONFIDENCE (Sobreconfianza en la IA):
+  // - Mide si los participantes tienen exceso de confianza en las capacidades de la IA
+  // - Relacionado con automation bias y algorithm aversion
+  //
+  // SELF-MOTIVATION (Motivación intrínseca):
+  // - Mide las razones personales para usar IA (eficiencia, confianza)
+  // - Relacionado con present bias y effort aversion
+  //
+  // SOCIAL ACCEPTANCE (Aceptación social):
+  // - Mide la percepción de normas sociales sobre el uso de IA
+  // - Relacionado con social norms y conformity bias
+  //
+  // Para modificar estas preguntas, edita el array 'questions' a continuación.
+  // Mantén los nombres (overconfidence_1, self_motivation_1, etc.) para el análisis de datos.
+
   const s7b = {
     type: jsPsychSurveyMultiChoice,
     preamble: `<h2>Actitudes hacia la IA</h2><p class="muted">Responde con sinceridad según tu experiencia.</p>`,
     questions: [
-      { prompt: 'Creo que las herramientas de IA pueden hacer mi trabajo mejor de lo que yo lo haría solo/a.',
-        options: ['Totalmente en desacuerdo','En desacuerdo','De acuerdo','Totalmente de acuerdo'],
-        required:true, name:'overconfidence_1' },
-      { prompt: 'Confío plenamente en las respuestas que me da una IA sin necesidad de revisarlas.',
-        options: ['Totalmente en desacuerdo','En desacuerdo','De acuerdo','Totalmente de acuerdo'],
-        required:true, name:'overconfidence_2' },
-      { prompt: 'Uso herramientas de IA principalmente para ahorrar tiempo y esfuerzo.',
-        options: ['Totalmente en desacuerdo','En desacuerdo','De acuerdo','Totalmente de acuerdo'],
-        required:true, name:'self_motivation_1' },
-      { prompt: 'Uso IA porque me ayuda a sentirme más seguro/a con mis resultados.',
-        options: ['Totalmente en desacuerdo','En desacuerdo','De acuerdo','Totalmente de acuerdo'],
-        required:true, name:'self_motivation_2' },
-      { prompt: 'La mayoría de mis compañeros/as de estudios usan herramientas de IA regularmente.',
-        options: ['Totalmente en desacuerdo','En desacuerdo','De acuerdo','Totalmente de acuerdo'],
-        required:true, name:'social_acceptance_1' },
-      { prompt: 'Usar IA para tareas académicas es algo normal y aceptado en mi entorno.',
-        options: ['Totalmente en desacuerdo','En desacuerdo','De acuerdo','Totalmente de acuerdo'],
-        required:true, name:'social_acceptance_2' }
+      // === OVERCONFIDENCE: Exceso de confianza en la IA ===
+
+      // Overconfidence 1: Capacidad superior de la IA
+      {
+        prompt: 'Creo que las herramientas de IA pueden hacer mi trabajo mejor de lo que yo lo haría solo/a.',
+        options: ['Totalmente en desacuerdo', 'En desacuerdo', 'Neutral', 'De acuerdo', 'Totalmente de acuerdo'],
+        required: true,
+        name: 'overconfidence_1'
+      },
+      // Overconfidence 2: Confianza ciega en outputs de IA
+      {
+        prompt: 'Confío plenamente en las respuestas que me da una IA sin necesidad de revisarlas.',
+        options: ['Totalmente en desacuerdo', 'En desacuerdo', 'Neutral', 'De acuerdo', 'Totalmente de acuerdo'],
+        required: true,
+        name: 'overconfidence_2'
+      },
+
+      // === SELF-MOTIVATION: Motivaciones personales para usar IA ===
+
+      // Self-motivation 1: Eficiencia y ahorro de esfuerzo
+      {
+        prompt: 'Uso herramientas de IA principalmente para ahorrar tiempo y esfuerzo.',
+        options: ['Totalmente en desacuerdo', 'En desacuerdo', 'Neutral', 'De acuerdo', 'Totalmente de acuerdo'],
+        required: true,
+        name: 'self_motivation_1'
+      },
+      // Self-motivation 2: Búsqueda de seguridad y confianza
+      {
+        prompt: 'Uso IA porque me ayuda a sentirme más seguro/a con mis resultados.',
+        options: ['Totalmente en desacuerdo', 'En desacuerdo', 'Neutral', 'De acuerdo', 'Totalmente de acuerdo'],
+        required: true,
+        name: 'self_motivation_2'
+      },
+
+      // === SOCIAL ACCEPTANCE: Percepción de normas sociales ===
+
+      // Social acceptance 1: Uso percibido por pares
+      {
+        prompt: 'La mayoría de mis compañeros/as de estudios usan herramientas de IA regularmente.',
+        options: ['Totalmente en desacuerdo', 'En desacuerdo', 'Neutral', 'De acuerdo', 'Totalmente de acuerdo'],
+        required: true,
+        name: 'social_acceptance_1'
+      },
+      // Social acceptance 2: Normalización del uso de IA
+      {
+        prompt: 'Usar IA para tareas académicas es algo normal y aceptado en mi entorno.',
+        options: ['Totalmente en desacuerdo', 'En desacuerdo', 'Neutral', 'De acuerdo', 'Totalmente de acuerdo'],
+        required: true,
+        name: 'social_acceptance_2'
+      }
     ],
     button_label: 'Continuar',
     on_finish: async (data) => {
