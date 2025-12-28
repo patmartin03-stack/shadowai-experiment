@@ -140,13 +140,16 @@ def get_or_create_worksheet(client, sheet_name, worksheet_name, headers):
             return None
 
         # Abrir o crear la worksheet
+        worksheet_exists = False
         try:
             worksheet = spreadsheet.worksheet(worksheet_name)
+            worksheet_exists = True
         except gspread.exceptions.WorksheetNotFound:
             try:
                 worksheet = spreadsheet.add_worksheet(title=worksheet_name, rows=1000, cols=len(headers))
                 worksheet.append_row(headers, value_input_option='RAW')
-                print(f"✅ Creada nueva hoja: {worksheet_name}")
+                print(f"✅ Creada nueva hoja: {worksheet_name} con encabezados")
+                return worksheet
             except gspread.exceptions.APIError as e:
                 print(f"⚠️ ERROR: Error de API al crear worksheet '{worksheet_name}': {e}")
                 return None
@@ -159,6 +162,35 @@ def get_or_create_worksheet(client, sheet_name, worksheet_name, headers):
         except Exception as e:
             print(f"⚠️ ERROR: No se pudo acceder a worksheet '{worksheet_name}': {type(e).__name__}: {e}")
             return None
+
+        # Si la worksheet ya existía, verificar que tenga encabezados
+        if worksheet_exists:
+            try:
+                # Verificar si la primera fila está vacía o no coincide con los headers esperados
+                first_row = worksheet.row_values(1)
+
+                if not first_row or first_row[0] == '' or first_row != headers:
+                    # La primera fila está vacía o los headers no coinciden
+                    print(f"⚠️ WARNING: Worksheet '{worksheet_name}' existe pero sin encabezados correctos")
+                    print(f"   Encabezados actuales: {first_row[:5] if first_row else '(vacío)'}...")
+                    print(f"   Encabezados esperados: {headers[:5]}...")
+
+                    # Si la hoja está completamente vacía, agregar headers
+                    if not first_row or all(cell == '' for cell in first_row):
+                        worksheet.append_row(headers, value_input_option='RAW')
+                        print(f"✅ Agregados encabezados a hoja existente: {worksheet_name}")
+                    else:
+                        print(f"⚠️ La hoja '{worksheet_name}' tiene datos. Por favor, verifica manualmente los encabezados.")
+                        # No sobrescribir datos existentes, pero continuar usando la hoja
+                else:
+                    print(f"✅ Hoja '{worksheet_name}' encontrada con encabezados correctos")
+
+            except gspread.exceptions.APIError as e:
+                print(f"⚠️ WARNING: No se pudo verificar encabezados de '{worksheet_name}': {e}")
+                # Continuar de todos modos
+            except Exception as e:
+                print(f"⚠️ WARNING: Error verificando encabezados de '{worksheet_name}': {type(e).__name__}: {e}")
+                # Continuar de todos modos
 
         return worksheet
 
@@ -314,11 +346,12 @@ def finalize():
 
         # Debug: Log task_text length y preview
         task_text = results.get("task_text", "")
+        has_newlines = '\n' in task_text
         print(f"📝 Finalizando participante {subject_id}:")
         print(f"   - task_text length: {len(task_text)} caracteres")
         print(f"   - words: {results.get('words', 0)} palabras")
         print(f"   - task_text preview (primeros 100 chars): {task_text[:100] if task_text else '(vacío)'}")
-        print(f"   - task_text tiene saltos de línea: {'Sí' if '\\n' in task_text else 'No'}")
+        print(f"   - task_text tiene saltos de línea: {'Sí' if has_newlines else 'No'}")
 
         # Conectar con Google Sheets
         client = get_google_sheets_client()
