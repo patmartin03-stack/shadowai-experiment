@@ -147,7 +147,8 @@ def get_or_create_worksheet(client, sheet_name, worksheet_name, headers):
         except gspread.exceptions.WorksheetNotFound:
             try:
                 worksheet = spreadsheet.add_worksheet(title=worksheet_name, rows=1000, cols=len(headers))
-                worksheet.append_row(headers, value_input_option='RAW')
+                # Usar update para poner headers específicamente en la fila 1
+                worksheet.update('A1', [headers], value_input_option='RAW')
                 print(f"✅ Creada nueva hoja: {worksheet_name} con encabezados")
                 return worksheet
             except gspread.exceptions.APIError as e:
@@ -169,21 +170,22 @@ def get_or_create_worksheet(client, sheet_name, worksheet_name, headers):
                 # Verificar si la primera fila está vacía o no coincide con los headers esperados
                 first_row = worksheet.row_values(1)
 
-                if not first_row or first_row[0] == '' or first_row != headers:
-                    # La primera fila está vacía o los headers no coinciden
-                    print(f"⚠️ WARNING: Worksheet '{worksheet_name}' existe pero sin encabezados correctos")
-                    print(f"   Encabezados actuales: {first_row[:5] if first_row else '(vacío)'}...")
-                    print(f"   Encabezados esperados: {headers[:5]}...")
+                print(f"🔍 Verificando worksheet '{worksheet_name}':")
+                print(f"   - Primera fila actual: {first_row[:3] if first_row else '(vacía)'}...")
+                print(f"   - Headers esperados: {headers[:3]}...")
 
-                    # Si la hoja está completamente vacía, agregar headers
-                    if not first_row or all(cell == '' for cell in first_row):
-                        worksheet.append_row(headers, value_input_option='RAW')
-                        print(f"✅ Agregados encabezados a hoja existente: {worksheet_name}")
-                    else:
-                        print(f"⚠️ La hoja '{worksheet_name}' tiene datos. Por favor, verifica manualmente los encabezados.")
-                        # No sobrescribir datos existentes, pero continuar usando la hoja
+                if not first_row or all(cell == '' for cell in first_row) or first_row != headers:
+                    # La primera fila está vacía o los headers no coinciden
+                    print(f"⚠️ WARNING: Worksheet '{worksheet_name}' necesita encabezados")
+
+                    # Usar update para escribir ESPECÍFICAMENTE en la fila 1
+                    try:
+                        worksheet.update('A1', [headers], value_input_option='RAW')
+                        print(f"✅ Encabezados actualizados en fila 1 de '{worksheet_name}'")
+                    except Exception as update_error:
+                        print(f"⚠️ ERROR actualizando headers: {type(update_error).__name__}: {update_error}")
                 else:
-                    print(f"✅ Hoja '{worksheet_name}' encontrada con encabezados correctos")
+                    print(f"✅ Hoja '{worksheet_name}' ya tiene encabezados correctos")
 
             except gspread.exceptions.APIError as e:
                 print(f"⚠️ WARNING: No se pudo verificar encabezados de '{worksheet_name}': {e}")
@@ -264,11 +266,15 @@ def log_event():
 
         # Headers para la hoja de eventos (incluye más detalles para análisis)
         headers = ["timestamp", "subject_id", "policy", "event", "trial_index", "time_on_screen_sec", "element_clicked", "payload_json"]
+
+        print(f"   📋 Obteniendo worksheet 'events' para evento '{event_type}'...")
         worksheet = get_or_create_worksheet(client, GOOGLE_SHEET_NAME, "events", headers)
 
         if not worksheet:
-            print("⚠️ ERROR: No se pudo obtener worksheet 'events'")
+            print(f"   ❌ ERROR: No se pudo obtener worksheet 'events' para evento '{event_type}'")
             return jsonify({"ok": True, "inserted": False, "error": "No se pudo acceder a la hoja"}), 200
+
+        print(f"   📋 Worksheet 'events' obtenido correctamente")
 
         # Extraer información útil del payload para columnas separadas
         payload = data.get("payload", {})
@@ -294,10 +300,13 @@ def log_event():
             json.dumps(payload) if payload else "{}"
         ]
 
+        # Log de la fila que se va a insertar
+        print(f"   💾 Insertando fila en 'events': {len(row)} columnas, evento='{event_type}'")
+
         # Insertar fila con manejo de errores de API
         try:
             worksheet.append_row(row, value_input_option='RAW')
-            print(f"   ✅ Evento '{event_type}' guardado en Google Sheets")
+            print(f"   ✅ Evento '{event_type}' guardado exitosamente en Google Sheets")
             return jsonify({"ok": True, "inserted": True}), 200
         except gspread.exceptions.APIError as e:
             print(f"⚠️ ERROR de API en /log para evento '{event_type}': {e}")
