@@ -41,22 +41,67 @@
   let idleTimer = null;
   let screenStartTime = Date.now(); // Tiempo de inicio de cada pantalla
 
-  // Enviar evento al backend (si no hay servidor, simplemente falla en silencio)
-  async function sendLog(event, payload={}) {
-    const body = { subject_id, event, payload, ts: nowIso(), policy: assignedPolicy.key };
+  // ====== Sistema de envío de eventos en batch ======
+  const eventBuffer = [];
+  let flushTimer = null;
+  const FLUSH_INTERVAL = 5000;  // Enviar cada 5 segundos
+  const FLUSH_SIZE = 10;        // O cuando haya 10+ eventos
+
+  function queueEvent(event, payload={}) {
+    eventBuffer.push({ subject_id, event, payload, ts: nowIso(), policy: assignedPolicy.key });
+    // Flush inmediato si hay suficientes eventos
+    if (eventBuffer.length >= FLUSH_SIZE) {
+      flushEventBuffer();
+    } else if (!flushTimer) {
+      flushTimer = setTimeout(flushEventBuffer, FLUSH_INTERVAL);
+    }
+  }
+
+  async function flushEventBuffer() {
+    if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+    if (eventBuffer.length === 0) return;
+
+    const batch = eventBuffer.splice(0);  // Vaciar buffer
     try {
-      const response = await fetch('/log', {
-        method:'POST',
-        headers:{ 'Content-Type':'application/json' },
-        body: JSON.stringify(body)
+      const response = await fetch('/log-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ events: batch })
       });
-      // No lanzar error si el servidor responde con 500, solo loguear
       if (!response.ok) {
-        console.warn(`⚠️ Log failed for event "${event}":`, response.status);
+        console.warn(`⚠️ Batch log failed:`, response.status);
+        // Re-encolar eventos que fallaron
+        eventBuffer.unshift(...batch);
       }
     } catch (err) {
-      // Sin backend o error de red → silenciar para no interrumpir el experimento
-      console.warn(`⚠️ Log network error for event "${event}":`, err.message);
+      console.warn(`⚠️ Batch log network error:`, err.message);
+      eventBuffer.unshift(...batch);
+    }
+  }
+
+  // Flush al cerrar/cambiar de página
+  window.addEventListener('beforeunload', () => {
+    if (eventBuffer.length > 0) {
+      const batch = eventBuffer.splice(0);
+      // sendBeacon es más fiable que fetch al cerrar página
+      const blob = new Blob([JSON.stringify({ events: batch })], { type: 'application/json' });
+      navigator.sendBeacon('/log-batch', blob);
+    }
+  });
+
+  // Enviar evento al backend usando el sistema de batch
+  async function sendLog(event, payload={}) {
+    queueEvent(event, payload);
+  }
+
+  // Flush forzado + esperar a que se complete (para momentos críticos como finalize)
+  async function flushAndWait() {
+    await flushEventBuffer();
+    // También pedirle al servidor que escriba lo pendiente
+    try {
+      await fetch('/flush-events', { method: 'POST' });
+    } catch (e) {
+      console.warn('⚠️ flush-events failed:', e.message);
     }
   }
 
@@ -772,6 +817,10 @@
         words: results.words,
         subject_id: subject_id
       });
+
+      // IMPORTANTE: Flush todos los eventos pendientes antes de finalizar
+      console.log('🔄 Flushing eventos pendientes antes de finalizar...');
+      await flushAndWait();
 
       // Intentar enviar con reintentos
       const result = await fetchWithRetry('/finalize', {
