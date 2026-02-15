@@ -221,6 +221,115 @@ def sanitize_for_sheets(value):
     return value
 
 # =============================================================
+# CACHÉ DE GOOGLE SHEETS (evita reconectar en cada request)
+# =============================================================
+_sheets_cache = {
+    "client": None,
+    "worksheets": {},       # worksheet_name → worksheet object
+    "last_auth": 0          # timestamp de última autenticación
+}
+import time as _time
+
+AUTH_TTL = 300  # Reautenticar cada 5 minutos
+
+def get_cached_client():
+    """Obtiene cliente de Google Sheets con caché (evita autenticar en cada request)"""
+    now = _time.time()
+    if _sheets_cache["client"] and (now - _sheets_cache["last_auth"]) < AUTH_TTL:
+        return _sheets_cache["client"]
+    client = get_google_sheets_client()
+    if client:
+        _sheets_cache["client"] = client
+        _sheets_cache["last_auth"] = now
+        _sheets_cache["worksheets"] = {}  # Limpiar worksheets al reautenticar
+    return client
+
+def get_cached_worksheet(client, sheet_name, worksheet_name, headers):
+    """Obtiene worksheet con caché para evitar abrir/verificar en cada request"""
+    if worksheet_name in _sheets_cache["worksheets"]:
+        return _sheets_cache["worksheets"][worksheet_name]
+    ws = get_or_create_worksheet(client, sheet_name, worksheet_name, headers)
+    if ws:
+        _sheets_cache["worksheets"][worksheet_name] = ws
+    return ws
+
+# =============================================================
+# COLA DE EVENTOS PENDIENTES (batch insert)
+# =============================================================
+import threading
+
+_events_lock = threading.Lock()
+_events_queue = []
+
+def flush_events():
+    """Escribe todos los eventos pendientes a Google Sheets de una sola vez"""
+    with _events_lock:
+        if not _events_queue:
+            return True
+        batch = list(_events_queue)
+        _events_queue.clear()
+
+    if not batch:
+        return True
+
+    try:
+        client = get_cached_client()
+        if not client:
+            print(f"⚠️ flush_events: Google Sheets no disponible, {len(batch)} eventos perdidos")
+            return False
+
+        headers = ["timestamp", "subject_id", "policy", "event", "trial_index",
+                    "time_on_screen_sec", "element_clicked", "payload_json"]
+        worksheet = get_cached_worksheet(client, GOOGLE_SHEET_NAME, "events", headers)
+        if not worksheet:
+            print(f"⚠️ flush_events: No se pudo obtener worksheet, {len(batch)} eventos perdidos")
+            return False
+
+        # Insertar todas las filas de golpe con batch update
+        try:
+            worksheet.append_rows(batch, value_input_option='RAW')
+            print(f"✅ flush_events: {len(batch)} eventos guardados en Google Sheets")
+            return True
+        except gspread.exceptions.APIError as e:
+            print(f"⚠️ flush_events: Error de API insertando {len(batch)} eventos: {e}")
+            # Re-encolar los eventos que fallaron
+            with _events_lock:
+                _events_queue.extend(batch)
+            # Invalidar caché por si el problema es de autenticación
+            _sheets_cache["worksheets"].pop("events", None)
+            return False
+        except Exception as e:
+            print(f"⚠️ flush_events: Error insertando {len(batch)} eventos: {type(e).__name__}: {e}")
+            with _events_lock:
+                _events_queue.extend(batch)
+            _sheets_cache["worksheets"].pop("events", None)
+            return False
+
+    except Exception as e:
+        print(f"⚠️ flush_events: Error inesperado: {type(e).__name__}: {e}")
+        return False
+
+# Timer para flush periódico
+_flush_timer = None
+
+def schedule_flush():
+    """Programa un flush de eventos cada 10 segundos"""
+    global _flush_timer
+    if _flush_timer:
+        _flush_timer.cancel()
+    _flush_timer = threading.Timer(10.0, _do_periodic_flush)
+    _flush_timer.daemon = True
+    _flush_timer.start()
+
+def _do_periodic_flush():
+    """Ejecuta flush periódico y reprograma"""
+    flush_events()
+    schedule_flush()
+
+# Arrancar el flush periódico
+schedule_flush()
+
+# =============================================================
 # INICIALIZAR FLASK
 # =============================================================
 app = Flask(__name__, static_folder='public', static_url_path='')
@@ -230,95 +339,106 @@ CORS(app)
 # RUTAS API (deben ir ANTES de las rutas estáticas)
 # =============================================================
 
-# ENDPOINT 1: /log  → guarda cada evento en Google Sheets
+# ENDPOINT 1: /log  → encola evento para batch insert en Google Sheets
 @app.route("/log", methods=["POST"])
 def log_event():
     try:
-        # Validar que la petición contiene JSON
         if not request.is_json and not request.data:
-            print("⚠️ ERROR en /log: Request no contiene JSON")
-            return jsonify({"ok": True, "inserted": False, "error": "Request debe contener JSON"}), 200
+            return jsonify({"ok": True, "queued": False, "error": "Request debe contener JSON"}), 200
 
-        # Parsear JSON con manejo de errores
         try:
             data = request.get_json(force=True)
         except Exception as e:
-            print(f"⚠️ ERROR en /log: JSON inválido: {type(e).__name__}: {e}")
-            return jsonify({"ok": True, "inserted": False, "error": "JSON inválido"}), 200
+            return jsonify({"ok": True, "queued": False, "error": "JSON inválido"}), 200
 
-        # Validar que data no sea None
         if data is None:
-            print("⚠️ ERROR en /log: JSON parseado es None")
-            return jsonify({"ok": True, "inserted": False, "error": "JSON vacío"}), 200
+            return jsonify({"ok": True, "queued": False, "error": "JSON vacío"}), 200
 
-        timestamp = data.get("ts") or datetime.utcnow().isoformat()
+        row = _build_event_row(data)
+        with _events_lock:
+            _events_queue.append(row)
+            queue_size = len(_events_queue)
+
         event_type = data.get("event", "unknown")
         subject_id = data.get("subject_id", "unknown")
+        print(f"📊 /log encolado: event={event_type}, subject={subject_id[:8]}..., cola={queue_size}")
 
-        # Log cada evento recibido para debugging
-        print(f"📊 /log recibido: event={event_type}, subject={subject_id[:8]}...")
+        # Flush inmediato si la cola tiene 15+ eventos
+        if queue_size >= 15:
+            threading.Thread(target=flush_events, daemon=True).start()
 
-        # Conectar con Google Sheets
-        client = get_google_sheets_client()
-        if not client:
-            print("⚠️ Google Sheets no disponible, evento no guardado")
-            return jsonify({"ok": True, "inserted": False, "note": "Google Sheets no configurado"}), 200
-
-        # Headers para la hoja de eventos (incluye más detalles para análisis)
-        headers = ["timestamp", "subject_id", "policy", "event", "trial_index", "time_on_screen_sec", "element_clicked", "payload_json"]
-
-        print(f"   📋 Obteniendo worksheet 'events' para evento '{event_type}'...")
-        worksheet = get_or_create_worksheet(client, GOOGLE_SHEET_NAME, "events", headers)
-
-        if not worksheet:
-            print(f"   ❌ ERROR: No se pudo obtener worksheet 'events' para evento '{event_type}'")
-            return jsonify({"ok": True, "inserted": False, "error": "No se pudo acceder a la hoja"}), 200
-
-        print(f"   📋 Worksheet 'events' obtenido correctamente")
-
-        # Extraer información útil del payload para columnas separadas
-        payload = data.get("payload", {})
-        trial_index = payload.get("trial_index", "") if isinstance(payload, dict) else ""
-        time_on_screen_sec = payload.get("time_on_screen_seconds", "") if isinstance(payload, dict) else ""
-
-        # Para clicks, extraer info del elemento
-        element_clicked = ""
-        if data.get("event") == "click" and isinstance(payload, dict) and "element" in payload:
-            elem = payload.get("element", {})
-            if isinstance(elem, dict):
-                element_clicked = f"{elem.get('tag', '')}#{elem.get('id', '')} .{elem.get('class', '')}"
-
-        # Preparar fila
-        row = [
-            timestamp,
-            data.get("subject_id", ""),
-            data.get("policy", ""),
-            data.get("event", ""),
-            trial_index,
-            time_on_screen_sec,
-            element_clicked,
-            json.dumps(payload) if payload else "{}"
-        ]
-
-        # Log de la fila que se va a insertar
-        print(f"   💾 Insertando fila en 'events': {len(row)} columnas, evento='{event_type}'")
-
-        # Insertar fila con manejo de errores de API
-        try:
-            worksheet.append_row(row, value_input_option='RAW')
-            print(f"   ✅ Evento '{event_type}' guardado exitosamente en Google Sheets")
-            return jsonify({"ok": True, "inserted": True}), 200
-        except gspread.exceptions.APIError as e:
-            print(f"⚠️ ERROR de API en /log para evento '{event_type}': {e}")
-            return jsonify({"ok": True, "inserted": False, "error": f"API error: {str(e)}"}), 200
-        except Exception as e:
-            print(f"⚠️ ERROR insertando fila en /log para evento '{event_type}': {type(e).__name__}: {e}")
-            return jsonify({"ok": True, "inserted": False, "error": str(e)}), 200
+        return jsonify({"ok": True, "queued": True}), 200
 
     except Exception as e:
         print(f"⚠️ ERROR inesperado en /log: {type(e).__name__}: {e}")
-        # No fallar el experimento si Google Sheets falla
-        return jsonify({"ok": True, "inserted": False, "error": str(e)}), 200
+        return jsonify({"ok": True, "queued": False, "error": str(e)}), 200
+
+# ENDPOINT 1b: /log-batch  → recibe múltiples eventos de golpe
+@app.route("/log-batch", methods=["POST"])
+def log_batch():
+    try:
+        if not request.is_json and not request.data:
+            return jsonify({"ok": True, "queued": 0}), 200
+
+        try:
+            data = request.get_json(force=True)
+        except Exception:
+            return jsonify({"ok": True, "queued": 0, "error": "JSON inválido"}), 200
+
+        events = data if isinstance(data, list) else data.get("events", [])
+        if not events:
+            return jsonify({"ok": True, "queued": 0}), 200
+
+        rows = [_build_event_row(evt) for evt in events if isinstance(evt, dict)]
+
+        with _events_lock:
+            _events_queue.extend(rows)
+            queue_size = len(_events_queue)
+
+        print(f"📊 /log-batch encolados: {len(rows)} eventos, cola total={queue_size}")
+
+        # Flush inmediato
+        threading.Thread(target=flush_events, daemon=True).start()
+
+        return jsonify({"ok": True, "queued": len(rows)}), 200
+
+    except Exception as e:
+        print(f"⚠️ ERROR en /log-batch: {type(e).__name__}: {e}")
+        return jsonify({"ok": True, "queued": 0, "error": str(e)}), 200
+
+# ENDPOINT 1c: /flush-events  → fuerza escritura de todos los eventos pendientes
+@app.route("/flush-events", methods=["POST"])
+def flush_events_endpoint():
+    try:
+        success = flush_events()
+        return jsonify({"ok": True, "flushed": success}), 200
+    except Exception as e:
+        print(f"⚠️ ERROR en /flush-events: {type(e).__name__}: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 200
+
+def _build_event_row(data):
+    """Construye una fila de evento a partir del JSON recibido"""
+    timestamp = data.get("ts") or datetime.utcnow().isoformat()
+    payload = data.get("payload", {})
+    trial_index = payload.get("trial_index", "") if isinstance(payload, dict) else ""
+    time_on_screen_sec = payload.get("time_on_screen_seconds", "") if isinstance(payload, dict) else ""
+
+    element_clicked = ""
+    if data.get("event") == "click" and isinstance(payload, dict) and "element" in payload:
+        elem = payload.get("element", {})
+        if isinstance(elem, dict):
+            element_clicked = f"{elem.get('tag', '')}#{elem.get('id', '')} .{elem.get('class', '')}"
+
+    return [
+        timestamp,
+        data.get("subject_id", ""),
+        data.get("policy", ""),
+        data.get("event", ""),
+        trial_index,
+        time_on_screen_sec,
+        element_clicked,
+        json.dumps(payload) if payload else "{}"
+    ]
 
 # =============================================================
 # ENDPOINT 2: /finalize  → guarda resumen final en Google Sheets
@@ -368,8 +488,12 @@ def finalize():
         print(f"   - task_text preview (primeros 100 chars): {task_text[:100] if task_text else '(vacío)'}")
         print(f"   - task_text tiene saltos de línea: {'Sí' if has_newlines else 'No'}")
 
-        # Conectar con Google Sheets
-        client = get_google_sheets_client()
+        # Flush de eventos pendientes ANTES de guardar resultados
+        print(f"🔄 Flushing eventos pendientes antes de finalizar...")
+        flush_events()
+
+        # Conectar con Google Sheets (usando caché)
+        client = get_cached_client()
         if not client:
             print("⚠️ ERROR CRÍTICO: Google Sheets no disponible en /finalize")
             return jsonify({"ok": False, "error": "Google Sheets no configurado - datos no guardados"}), 503
@@ -392,7 +516,7 @@ def finalize():
             "ai_self_motivation_1", "ai_self_motivation_2",
             "ai_social_acceptance_1", "ai_social_acceptance_2"
         ]
-        worksheet = get_or_create_worksheet(client, GOOGLE_SHEET_NAME, "results", headers)
+        worksheet = get_cached_worksheet(client, GOOGLE_SHEET_NAME, "results", headers)
 
         if not worksheet:
             print("⚠️ ERROR CRÍTICO: No se pudo obtener worksheet 'results' en /finalize")
