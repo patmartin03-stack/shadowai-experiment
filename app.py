@@ -502,19 +502,20 @@ def finalize():
         headers = [
             "timestamp", "subject_id", "policy",
             # Demográficos
-            "dob", "sex", "studies", "grad_year", "uni", "field", "city", "gpa",
+            "dob", "sex", "studies", "grad_year", "uni", "field", "gpa",
             # Tarea
             "task_text", "words", "edit_count",
             # Uso de IA
             "ai_generated_pct", "ai_paraphrased_pct",
             # Control
             "noticed_policy", "used_ai_button", "used_external_ai",
-            # Personalidad
+            # Personalidad (Sobre tu forma de trabajar)
             "personality_q1", "personality_q2", "personality_q3",
-            # Motivaciones de uso de IA
+            # Actitudes hacia la IA (Qué piensas de la IA)
             "ai_overconfidence_1", "ai_overconfidence_2",
-            "ai_self_motivation_1", "ai_self_motivation_2",
-            "ai_social_acceptance_1", "ai_social_acceptance_2"
+            "ai_norm_internalization_1", "ai_norm_internalization_2",
+            "ai_reference_group_1", "ai_reference_group_2",
+            "ai_peer_group_1", "ai_peer_group_2"
         ]
         worksheet = get_cached_worksheet(client, GOOGLE_SHEET_NAME, "results", headers)
 
@@ -534,14 +535,13 @@ def finalize():
             datetime.utcnow().isoformat(),
             subject_id,
             demographics.get("policy", ""),
-            # Demográficos
+            # Demográficos (city eliminado del cuestionario)
             demographics.get("dob", ""),
             demographics.get("sex", ""),
             demographics.get("studies", ""),
             demographics.get("grad_year", ""),
             demographics.get("uni", ""),
             demographics.get("field", ""),
-            demographics.get("city", ""),
             demographics.get("gpa", ""),
             # Tarea (task_text es la variable que definimos arriba)
             task_text,  # El texto completo de la tarea
@@ -554,17 +554,19 @@ def finalize():
             control.get("noticed_policy", ""),
             control.get("used_ai_button", ""),
             control.get("used_external_ai", ""),
-            # Personalidad
+            # Personalidad (Sobre tu forma de trabajar)
             personality.get("q1", ""),
             personality.get("q2", ""),
             personality.get("q3", ""),
-            # Motivaciones de uso de IA
+            # Actitudes hacia la IA (Qué piensas de la IA)
             ai_motivation.get("overconfidence_1", ""),
             ai_motivation.get("overconfidence_2", ""),
-            ai_motivation.get("self_motivation_1", ""),
-            ai_motivation.get("self_motivation_2", ""),
-            ai_motivation.get("social_acceptance_1", ""),
-            ai_motivation.get("social_acceptance_2", "")
+            ai_motivation.get("norm_internalization_1", ""),
+            ai_motivation.get("norm_internalization_2", ""),
+            ai_motivation.get("reference_group_1", ""),
+            ai_motivation.get("reference_group_2", ""),
+            ai_motivation.get("peer_group_1", ""),
+            ai_motivation.get("peer_group_2", "")
         ]
 
         # Insertar fila con manejo robusto de errores
