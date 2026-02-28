@@ -259,7 +259,7 @@
         <option>Mujer</option>
       </select>
 
-      <label class="label">Estudios superiores cursados</label>
+      <label class="label">Últimos estudios superiores cursados</label>
       <select class="input" name="studies" id="studies" required>
         <option value="">Selecciona…</option>
         <option>Grado</option>
@@ -268,18 +268,8 @@
         <option>Ya graduado/a (Grado o Máster)</option>
       </select>
 
-      <div id="grad_year_wrap" class="hidden">
-        <label class="label">Año de graduación</label>
-        <input class="input" type="number" name="grad_year" id="grad_year" min="1950" max="2035" />
-      </div>
-      <script>
-        const sel = document.getElementById('studies');
-        const wrap = document.getElementById('grad_year_wrap');
-        sel.addEventListener('change', () => {
-          if (sel.value.startsWith('Ya graduado')) wrap.classList.remove('hidden');
-          else wrap.classList.add('hidden');
-        });
-      </script>
+      <label class="label">Año de graduación de los últimos estudios superiores (en curso o finalizados)</label>
+      <input class="input" type="number" name="grad_year" id="grad_year" min="1950" max="2035" placeholder="Ej: 2024" required />
     `,
     button_label: 'Continuar',
     on_finish: async (data) => {
