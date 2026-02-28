@@ -160,8 +160,22 @@
         trial_index: jsPsych.getProgress().current_trial_global
       });
     },
-    on_finish: async () => {
-      // nada aquí; el finalize se hace en la última pantalla
+    on_finish: () => {
+      // Mostrar mensaje de agradecimiento automáticamente al finalizar la pantalla 9
+      const target = document.getElementById('jspsych-target');
+      if (target) {
+        target.innerHTML = `
+          <div style="display:flex;justify-content:center;align-items:center;min-height:60vh;padding:24px;">
+            <div class="center">
+              <h2>¡Gracias por participar!</h2>
+              <p>Tu respuesta ha sido guardada correctamente.</p>
+              <p class="muted">
+                Si deseas más información o retirar tus datos, escríbenos a
+                <a href="mailto:pmartinmartinez@alu.comillas.edu">pmartinmartinez@alu.comillas.edu</a>.
+              </p>
+            </div>
+          </div>`;
+      }
     }
   });
 
@@ -243,8 +257,6 @@
         <option value="">Selecciona…</option>
         <option>Hombre</option>
         <option>Mujer</option>
-        <option>Prefiero no decirlo</option>
-        <option>Otro</option>
       </select>
 
       <label class="label">Estudios superiores cursados</label>
@@ -309,13 +321,17 @@
       <div>
         <h2>Tarea</h2>
         <p class="task-prompt"><em>${taskPrompt}</em></p>
-        <p>Redacta un texto entre <strong>90 y 300 palabras</strong>.</p>
+        <p>Redacta un texto entre <strong>150 y 300 palabras</strong>.</p>
         <textarea class="input" id="task_text" rows="10" placeholder="Escribe aquí…"></textarea>
         <div class="task-tools">
-          ${assignedPolicy.showAIButton ? '<button id="ai_help" class="btn-outline" type="button">Ayuda de IA</button>' : ''}
+          ${assignedPolicy.showAIButton ? '<button id="ai_help" class="btn-outline" type="button" title="Si seleccionas una frase y solicitas ayuda, ofrece una frase alternativa. Si simplemente clickeas, proporciona una frase o definición para continuar.">Ayuda de IA</button>' : '<span></span>'}
           <span id="word_count" class="muted">0 palabras</span>
         </div>
         <div id="ai_suggestions" class="suggestions hidden"></div>
+        <div class="policy" style="margin-top:16px;">
+          <strong>Tu política de uso de IA asignada:</strong>
+          <p>${assignedPolicy.description}</p>
+        </div>
       </div>
     `,
     choices: ['Continuar'],
@@ -332,7 +348,7 @@
       const update = () => {
         const n = wordsOf(ta.value);
         wc.textContent = `${n} ${n===1?'palabra':'palabras'}`;
-        contBtn.disabled = !(n>=90 && n<=300);
+        contBtn.disabled = !(n>=150 && n<=300);
         editLog.push({ t: nowIso(), len: ta.value.length });
         // Guardar en store para que esté disponible en on_finish
         store.task_text = ta.value;
@@ -542,14 +558,14 @@
   // ====== PANTALLA 5 — Control ======
   const s5 = {
     type: jsPsychSurveyMultiChoice,
-    preamble: `<h2>Cuestionario (control)</h2>`,
+    preamble: `<h2>Alguna pregunta sobre la tarea</h2>`,
     questions: [
       { prompt: '¿Te diste cuenta de que había una indicación sobre el uso de IA?',
-        options: ['Sí','No','No estoy seguro/a'], required:true, name:'noticed_policy' },
+        options: ['Sí','No'], required:true, name:'noticed_policy' },
       { prompt: '¿Usaste el botón de ayuda de IA?',
         options: ['Sí','No'], required:true, name:'used_ai_button' },
       { prompt: '¿Usaste alguna IA externa al experimento?',
-        options: ['Sí','No','Prefiero no decir'], required:true, name:'used_external_ai' }
+        options: ['Sí','No'], required:true, name:'used_external_ai' }
     ],
     button_label: 'Continuar',
     on_finish: async (data) => {
@@ -561,7 +577,7 @@
   // ====== PANTALLA 6 — Demográficas ampliadas ======
   const s6 = {
     type: jsPsychSurveyHtmlForm,
-    preamble: `<h2>Datos demográficos</h2>`,
+    preamble: `<h2>Sobre tus estudios</h2>`,
     html: `
       <label class="label">Universidad en la que has estudiado</label>
       <select class="input" name="uni" required>
@@ -661,9 +677,6 @@
         <option>Otra</option>
       </select>
 
-      <label class="label">Ciudad donde estudiaste/estudias</label>
-      <input class="input" name="city" placeholder="Ej: Madrid" required />
-
       <label class="label">Nota media de los últimos estudios (0–10)</label>
       <input class="input" type="number" step="0.01" min="0" max="10" name="gpa" placeholder="Ej: 7.8" required />
     `,
@@ -674,21 +687,32 @@
     }
   };
 
-  // ====== PANTALLA 7 — Personalidad / behavioural ======
+  // ====== Helper: genera HTML de pregunta Likert horizontal 5 puntos ======
+  function makeLikert(name, question) {
+    return `
+      <div class="likert-group">
+        <p class="likert-question">${question}</p>
+        <div class="likert-scale">
+          <span class="likert-anchor">Totalmente<br>en desacuerdo</span>
+          <label class="likert-option"><input type="radio" name="${name}" value="1" required><span>1</span></label>
+          <label class="likert-option"><input type="radio" name="${name}" value="2"><span>2</span></label>
+          <label class="likert-option"><input type="radio" name="${name}" value="3"><span>3</span></label>
+          <label class="likert-option"><input type="radio" name="${name}" value="4"><span>4</span></label>
+          <label class="likert-option"><input type="radio" name="${name}" value="5"><span>5</span></label>
+          <span class="likert-anchor">Totalmente<br>de acuerdo</span>
+        </div>
+      </div>`;
+  }
+
+  // ====== PANTALLA 7 — Sobre tu forma de trabajar (Likert 5 puntos horizontal) ======
   const s7 = {
-    type: jsPsychSurveyMultiChoice,
-    preamble: `<h2>Cuestionario de personalidad</h2><p class="muted">Selecciona la opción que mejor te representa.</p>`,
-    questions: [
-      { prompt: 'Cuando una norma me parece injusta, tiendo a no cumplirla.',
-        options: ['Totalmente en desacuerdo','En desacuerdo','De acuerdo','Totalmente de acuerdo'],
-        required:true, name:'q1' },
-      { prompt: 'Suelo subestimar el tiempo que me llevará completar una tarea.',
-        options: ['Nunca','A veces','A menudo','Siempre'],
-        required:true, name:'q2' },
-      { prompt: 'Me siento cómodo/a pidiendo ayuda a herramientas digitales.',
-        options: ['Nada','Poco','Bastante','Mucho'],
-        required:true, name:'q3' }
-    ],
+    type: jsPsychSurveyHtmlForm,
+    preamble: `<h2>Sobre tu forma de trabajar</h2><p class="muted">Indica tu nivel de acuerdo con cada afirmación<br>(1 = Totalmente en desacuerdo &nbsp;·&nbsp; 5 = Totalmente de acuerdo).</p>`,
+    html: `
+      ${makeLikert('q1', 'Cuando una norma me parece injusta, tiendo a no cumplirla.')}
+      ${makeLikert('q2', 'Suelo subestimar el tiempo que me llevará completar una tarea.')}
+      ${makeLikert('q3', 'Me siento cómodo/a usando herramientas digitales cuando necesito ayuda.')}
+    `,
     button_label: 'Continuar',
     on_finish: async (data) => {
       store.personality = data.response;
@@ -696,30 +720,20 @@
     }
   };
 
-  // ====== PANTALLA 7B — Motivaciones de uso de IA ======
+  // ====== PANTALLA 8B — Qué piensas de la IA (Likert 5 puntos horizontal) ======
   const s7b = {
-    type: jsPsychSurveyMultiChoice,
-    preamble: `<h2>Actitudes hacia la IA</h2><p class="muted">Responde con sinceridad según tu experiencia.</p>`,
-    questions: [
-      { prompt: 'Creo que las herramientas de IA pueden hacer mi trabajo mejor de lo que yo lo haría solo/a.',
-        options: ['Totalmente en desacuerdo','En desacuerdo','De acuerdo','Totalmente de acuerdo'],
-        required:true, name:'overconfidence_1' },
-      { prompt: 'Confío plenamente en las respuestas que me da una IA sin necesidad de revisarlas.',
-        options: ['Totalmente en desacuerdo','En desacuerdo','De acuerdo','Totalmente de acuerdo'],
-        required:true, name:'overconfidence_2' },
-      { prompt: 'Uso herramientas de IA principalmente para ahorrar tiempo y esfuerzo.',
-        options: ['Totalmente en desacuerdo','En desacuerdo','De acuerdo','Totalmente de acuerdo'],
-        required:true, name:'self_motivation_1' },
-      { prompt: 'Uso IA porque me ayuda a sentirme más seguro/a con mis resultados.',
-        options: ['Totalmente en desacuerdo','En desacuerdo','De acuerdo','Totalmente de acuerdo'],
-        required:true, name:'self_motivation_2' },
-      { prompt: 'La mayoría de mis compañeros/as de estudios usan herramientas de IA regularmente.',
-        options: ['Totalmente en desacuerdo','En desacuerdo','De acuerdo','Totalmente de acuerdo'],
-        required:true, name:'social_acceptance_1' },
-      { prompt: 'Usar IA para tareas académicas es algo normal y aceptado en mi entorno.',
-        options: ['Totalmente en desacuerdo','En desacuerdo','De acuerdo','Totalmente de acuerdo'],
-        required:true, name:'social_acceptance_2' }
-    ],
+    type: jsPsychSurveyHtmlForm,
+    preamble: `<h2>Qué piensas de la IA</h2><p class="muted">Indica tu nivel de acuerdo con cada afirmación<br>(1 = Totalmente en desacuerdo &nbsp;·&nbsp; 5 = Totalmente de acuerdo).</p>`,
+    html: `
+      ${makeLikert('overconfidence_1',      'Cuando uso herramientas de IA, el resultado es de mejor calidad que si trabajara yo solo/a.')}
+      ${makeLikert('overconfidence_2',      'Acepto lo que me dice la IA sin necesidad de verificarlo por mi cuenta.')}
+      ${makeLikert('norm_internalization_1','Respetaría las normas sobre el uso de IA aunque nadie pudiera comprobarlo.')}
+      ${makeLikert('norm_internalization_2','Si la IA mejora mi trabajo, usarla está justificado aunque esté prohibido.')}
+      ${makeLikert('reference_group_1',    'En mi universidad, las normas sobre el uso de IA en trabajos están bien definidas y son claras.')}
+      ${makeLikert('reference_group_2',    'Mis profesores tienen una postura clara sobre qué usos de la IA son aceptables en los trabajos.')}
+      ${makeLikert('peer_group_1',         'La mayoría de mis compañeros/as usan IA regularmente en sus tareas académicas.')}
+      ${makeLikert('peer_group_2',         'En mi entorno de amigos y compañeros, usar IA para estudiar es algo habitual y aceptado.')}
+    `,
     button_label: 'Continuar',
     on_finish: async (data) => {
       store.ai_motivation = data.response;
@@ -727,7 +741,7 @@
     }
   };
 
-  // ====== PANTALLA 8 — Gracias + finalize ======
+  // ====== FINALIZE — Envío de datos al terminar pantalla 9 (invisible para el usuario) ======
   // Función auxiliar para reintentar con backoff exponencial
   async function fetchWithRetry(url, options, maxRetries = 3) {
     let lastError;
@@ -852,24 +866,10 @@
     }
   };
 
-  const s8 = {
-    type: jsPsychHtmlButtonResponse,
-    stimulus: `
-      <div class="center">
-        <h2>¡Gracias por participar!</h2>
-        <p>Tu respuesta ha sido guardada correctamente.</p>
-        <p class="muted">
-          Si deseas más información o retirar tus datos, escríbenos a
-          <a href="mailto:pmartinmartinez@alu.comillas.edu">pmartinmartinez@alu.comillas.edu</a>.
-        </p>
-      </div>
-    `,
-    choices: ['Finalizar'],
-    on_load: () => sendLog('thanks_screen')
-  };
-
   // ====== Timeline completo ======
-  const timeline = [s1, s2, s3, s4, s4b, s5, s6, s7, s7b, finalizeCall, s8];
+  // Pantalla 10 eliminada: el finalize ocurre automáticamente tras pantalla 9 (s7b),
+  // y el mensaje de agradecimiento se muestra en el on_finish de jsPsych.
+  const timeline = [s1, s2, s3, s4, s4b, s5, s6, s7, s7b, finalizeCall];
 
   // ¡Comenzar!
   jsPsych.run(timeline);
