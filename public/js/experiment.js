@@ -259,7 +259,7 @@
         <option>Mujer</option>
       </select>
 
-      <label class="label">Estudios superiores cursados</label>
+      <label class="label">Últimos estudios superiores cursados</label>
       <select class="input" name="studies" id="studies" required>
         <option value="">Selecciona…</option>
         <option>Grado</option>
@@ -268,18 +268,8 @@
         <option>Ya graduado/a (Grado o Máster)</option>
       </select>
 
-      <div id="grad_year_wrap" class="hidden">
-        <label class="label">Año de graduación</label>
-        <input class="input" type="number" name="grad_year" id="grad_year" min="1950" max="2035" />
-      </div>
-      <script>
-        const sel = document.getElementById('studies');
-        const wrap = document.getElementById('grad_year_wrap');
-        sel.addEventListener('change', () => {
-          if (sel.value.startsWith('Ya graduado')) wrap.classList.remove('hidden');
-          else wrap.classList.add('hidden');
-        });
-      </script>
+      <label class="label">Año de graduación de los últimos estudios superiores (en curso o finalizados)</label>
+      <input class="input" type="number" name="grad_year" id="grad_year" min="1950" max="2035" placeholder="Ej: 2024" required />
     `,
     button_label: 'Continuar',
     on_finish: async (data) => {
@@ -303,8 +293,9 @@
         <p>
           ${taskPrompt}
         </p>
-        <div class="policy">
-          <strong>Política de uso de IA:</strong>
+        <p class="muted" style="font-size:0.9em;">Redacta un texto de entre <strong>60 y 120 palabras</strong>.</p>
+        <div class="policy" style="opacity:0.65;">
+          <span style="font-size:0.85em; font-weight:600; color:var(--muted);">Política de uso de IA</span>
           <p>${assignedPolicy.description}</p>
         </div>
       </div>
@@ -312,7 +303,7 @@
     choices: ['Continuar']
   };
 
-  // ====== PANTALLA 4 — Tarea 150–300 palabras + Ayuda IA con OpenAI ======
+  // ====== PANTALLA 4 — Tarea 60–120 palabras + Ayuda IA con OpenAI ======
   let editLog = [];
 
   const s4 = {
@@ -321,15 +312,15 @@
       <div>
         <h2>Tarea</h2>
         <p class="task-prompt"><em>${taskPrompt}</em></p>
-        <p>Redacta un texto entre <strong>150 y 300 palabras</strong>.</p>
+        <p>Redacta un texto entre <strong>60 y 120 palabras</strong>.</p>
         <textarea class="input" id="task_text" rows="10" placeholder="Escribe aquí…"></textarea>
         <div class="task-tools">
           ${assignedPolicy.showAIButton ? '<button id="ai_help" class="btn-outline" type="button" title="Si seleccionas una frase y solicitas ayuda, ofrece una frase alternativa. Si simplemente clickeas, proporciona una frase o definición para continuar.">Ayuda de IA</button>' : '<span></span>'}
           <span id="word_count" class="muted">0 palabras</span>
         </div>
         <div id="ai_suggestions" class="suggestions hidden"></div>
-        <div class="policy" style="margin-top:16px;">
-          <strong>Tu política de uso de IA asignada:</strong>
+        <div class="policy" style="margin-top:16px; opacity:0.65;">
+          <span style="font-size:0.85em; font-weight:600; color:var(--muted);">Política de uso de IA</span>
           <p>${assignedPolicy.description}</p>
         </div>
       </div>
@@ -348,7 +339,7 @@
       const update = () => {
         const n = wordsOf(ta.value);
         wc.textContent = `${n} ${n===1?'palabra':'palabras'}`;
-        contBtn.disabled = !(n>=150 && n<=300);
+        contBtn.disabled = !(n>=55 && n<=130);
         editLog.push({ t: nowIso(), len: ta.value.length });
         // Guardar en store para que esté disponible en on_finish
         store.task_text = ta.value;
