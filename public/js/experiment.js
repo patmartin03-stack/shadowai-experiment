@@ -293,8 +293,9 @@
         <p>
           ${taskPrompt}
         </p>
-        <div class="policy">
-          <strong>Política de uso de IA:</strong>
+        <p class="muted" style="font-size:0.9em;">Redacta un texto de entre <strong>150 y 300 palabras</strong>.</p>
+        <div class="policy" style="opacity:0.65;">
+          <span style="font-size:0.85em; font-weight:600; color:var(--muted);">Política de uso de IA</span>
           <p>${assignedPolicy.description}</p>
         </div>
       </div>
@@ -318,8 +319,8 @@
           <span id="word_count" class="muted">0 palabras</span>
         </div>
         <div id="ai_suggestions" class="suggestions hidden"></div>
-        <div class="policy" style="margin-top:16px;">
-          <strong>Tu política de uso de IA asignada:</strong>
+        <div class="policy" style="margin-top:16px; opacity:0.65;">
+          <span style="font-size:0.85em; font-weight:600; color:var(--muted);">Política de uso de IA</span>
           <p>${assignedPolicy.description}</p>
         </div>
       </div>
