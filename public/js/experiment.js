@@ -293,7 +293,7 @@
         <p>
           ${taskPrompt}
         </p>
-        <p class="muted" style="font-size:0.9em;">Redacta un texto de entre <strong>150 y 300 palabras</strong>.</p>
+        <p class="muted" style="font-size:0.9em;">Redacta un texto de entre <strong>60 y 120 palabras</strong>.</p>
         <div class="policy" style="opacity:0.65;">
           <span style="font-size:0.85em; font-weight:600; color:var(--muted);">Política de uso de IA</span>
           <p>${assignedPolicy.description}</p>
@@ -303,7 +303,7 @@
     choices: ['Continuar']
   };
 
-  // ====== PANTALLA 4 — Tarea 150–300 palabras + Ayuda IA con OpenAI ======
+  // ====== PANTALLA 4 — Tarea 60–120 palabras + Ayuda IA con OpenAI ======
   let editLog = [];
 
   const s4 = {
@@ -312,7 +312,7 @@
       <div>
         <h2>Tarea</h2>
         <p class="task-prompt"><em>${taskPrompt}</em></p>
-        <p>Redacta un texto entre <strong>150 y 300 palabras</strong>.</p>
+        <p>Redacta un texto entre <strong>60 y 120 palabras</strong>.</p>
         <textarea class="input" id="task_text" rows="10" placeholder="Escribe aquí…"></textarea>
         <div class="task-tools">
           ${assignedPolicy.showAIButton ? '<button id="ai_help" class="btn-outline" type="button" title="Si seleccionas una frase y solicitas ayuda, ofrece una frase alternativa. Si simplemente clickeas, proporciona una frase o definición para continuar.">Ayuda de IA</button>' : '<span></span>'}
@@ -339,7 +339,7 @@
       const update = () => {
         const n = wordsOf(ta.value);
         wc.textContent = `${n} ${n===1?'palabra':'palabras'}`;
-        contBtn.disabled = !(n>=150 && n<=300);
+        contBtn.disabled = !(n>=60 && n<=120);
         editLog.push({ t: nowIso(), len: ta.value.length });
         // Guardar en store para que esté disponible en on_finish
         store.task_text = ta.value;
