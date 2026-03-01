@@ -339,7 +339,7 @@
       const update = () => {
         const n = wordsOf(ta.value);
         wc.textContent = `${n} ${n===1?'palabra':'palabras'}`;
-        contBtn.disabled = !(n>=60 && n<=120);
+        contBtn.disabled = !(n>=55 && n<=130);
         editLog.push({ t: nowIso(), len: ta.value.length });
         // Guardar en store para que esté disponible en on_finish
         store.task_text = ta.value;
