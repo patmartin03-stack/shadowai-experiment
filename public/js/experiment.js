@@ -259,13 +259,12 @@
         <option>Mujer</option>
       </select>
 
-      <label class="label">Últimos estudios superiores cursados</label>
+      <label class="label">Últimos estudios superiores cursados o en curso</label>
       <select class="input" name="studies" id="studies" required>
         <option value="">Selecciona…</option>
         <option>Grado</option>
         <option>Máster</option>
         <option>Doctorado</option>
-        <option>Ya graduado/a (Grado o Máster)</option>
       </select>
 
       <label class="label">Año de graduación de los últimos estudios superiores (en curso o finalizados)</label>
