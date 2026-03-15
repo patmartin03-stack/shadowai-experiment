@@ -104,92 +104,59 @@ def get_google_sheets_client():
         return None
 
 def get_or_create_worksheet(client, sheet_name, worksheet_name, headers):
-    """Obtener o crear una hoja de trabajo con los encabezados especificados"""
+    """Obtener o crear una hoja de trabajo. Si ya existe, asegura que tenga suficientes columnas."""
     if not client:
-        print(f"⚠️ ERROR: Cliente de Google Sheets es None, no se puede acceder a worksheet {worksheet_name}")
+        print(f"⚠️ ERROR: Cliente de Google Sheets es None")
         return None
 
     try:
-        # Abrir o crear el spreadsheet
-        try:
-            spreadsheet = client.open(sheet_name)
-        except gspread.exceptions.SpreadsheetNotFound:
-            try:
-                spreadsheet = client.create(sheet_name)
-                print(f"✅ Creado nuevo Google Sheet: {sheet_name}")
-            except gspread.exceptions.APIError as e:
-                print(f"⚠️ ERROR: Error de API al crear spreadsheet '{sheet_name}': {e}")
-                return None
-            except Exception as e:
-                print(f"⚠️ ERROR: No se pudo crear spreadsheet '{sheet_name}': {type(e).__name__}: {e}")
-                return None
-        except gspread.exceptions.APIError as e:
-            print(f"⚠️ ERROR: Error de API al abrir spreadsheet '{sheet_name}': {e}")
-            return None
-        except Exception as e:
-            print(f"⚠️ ERROR: No se pudo abrir spreadsheet '{sheet_name}': {type(e).__name__}: {e}")
-            return None
-
-        # Abrir o crear la worksheet
-        worksheet_exists = False
-        try:
-            worksheet = spreadsheet.worksheet(worksheet_name)
-            worksheet_exists = True
-        except gspread.exceptions.WorksheetNotFound:
-            try:
-                worksheet = spreadsheet.add_worksheet(title=worksheet_name, rows=1000, cols=len(headers))
-                # Usar update para poner headers específicamente en la fila 1
-                worksheet.update([headers], 'A1', value_input_option='RAW')
-                print(f"✅ Creada nueva hoja: {worksheet_name} con encabezados")
-                return worksheet
-            except gspread.exceptions.APIError as e:
-                print(f"⚠️ ERROR: Error de API al crear worksheet '{worksheet_name}': {e}")
-                return None
-            except Exception as e:
-                print(f"⚠️ ERROR: No se pudo crear worksheet '{worksheet_name}': {type(e).__name__}: {e}")
-                return None
-        except gspread.exceptions.APIError as e:
-            print(f"⚠️ ERROR: Error de API al acceder a worksheet '{worksheet_name}': {e}")
-            return None
-        except Exception as e:
-            print(f"⚠️ ERROR: No se pudo acceder a worksheet '{worksheet_name}': {type(e).__name__}: {e}")
-            return None
-
-        # Si la worksheet ya existía, verificar que tenga encabezados
-        if worksheet_exists:
-            try:
-                # Verificar si la primera fila está vacía o no coincide con los headers esperados
-                first_row = worksheet.row_values(1)
-
-                print(f"🔍 Verificando worksheet '{worksheet_name}':")
-                print(f"   - Primera fila actual: {first_row[:3] if first_row else '(vacía)'}...")
-                print(f"   - Headers esperados: {headers[:3]}...")
-
-                if not first_row or all(cell == '' for cell in first_row) or first_row != headers:
-                    # La primera fila está vacía o los headers no coinciden
-                    print(f"⚠️ WARNING: Worksheet '{worksheet_name}' necesita encabezados")
-
-                    # Usar update para escribir ESPECÍFICAMENTE en la fila 1
-                    try:
-                        worksheet.update([headers], 'A1', value_input_option='RAW')
-                        print(f"✅ Encabezados actualizados en fila 1 de '{worksheet_name}'")
-                    except Exception as update_error:
-                        print(f"⚠️ ERROR actualizando headers: {type(update_error).__name__}: {update_error}")
-                else:
-                    print(f"✅ Hoja '{worksheet_name}' ya tiene encabezados correctos")
-
-            except gspread.exceptions.APIError as e:
-                print(f"⚠️ WARNING: No se pudo verificar encabezados de '{worksheet_name}': {e}")
-                # Continuar de todos modos
-            except Exception as e:
-                print(f"⚠️ WARNING: Error verificando encabezados de '{worksheet_name}': {type(e).__name__}: {e}")
-                # Continuar de todos modos
-
-        return worksheet
-
-    except Exception as e:
-        print(f"⚠️ ERROR inesperado obteniendo worksheet '{worksheet_name}': {type(e).__name__}: {e}")
+        spreadsheet = client.open(sheet_name)
+    except gspread.exceptions.SpreadsheetNotFound:
+        print(f"⚠️ ERROR: Spreadsheet '{sheet_name}' no encontrado")
         return None
+    except Exception as e:
+        print(f"⚠️ ERROR abriendo spreadsheet: {type(e).__name__}: {e}")
+        return None
+
+    # Obtener o crear la worksheet
+    try:
+        worksheet = spreadsheet.worksheet(worksheet_name)
+        print(f"✅ Worksheet '{worksheet_name}' encontrada")
+    except gspread.exceptions.WorksheetNotFound:
+        try:
+            worksheet = spreadsheet.add_worksheet(title=worksheet_name, rows=2000, cols=len(headers))
+            worksheet.append_row(headers, value_input_option='RAW')
+            print(f"✅ Creada nueva worksheet '{worksheet_name}' con {len(headers)} columnas")
+            return worksheet
+        except Exception as e:
+            print(f"⚠️ ERROR creando worksheet '{worksheet_name}': {type(e).__name__}: {e}")
+            return None
+    except Exception as e:
+        print(f"⚠️ ERROR accediendo a worksheet '{worksheet_name}': {type(e).__name__}: {e}")
+        return None
+
+    # ── CRÍTICO: Asegurar que la worksheet tiene suficientes columnas ──
+    # El worksheet "events" fue creado originalmente con 5 columnas y ahora
+    # necesita 8. Google Sheets rechaza writes que excedan el grid → resize.
+    try:
+        current_cols = worksheet.col_count
+        if current_cols < len(headers):
+            print(f"⚠️ Worksheet '{worksheet_name}' tiene {current_cols} columnas, necesita {len(headers)}. Redimensionando...")
+            worksheet.resize(rows=max(worksheet.row_count, 2000), cols=len(headers))
+            print(f"✅ Worksheet '{worksheet_name}' redimensionada a {len(headers)} columnas")
+            # Actualizar cabeceras sólo si la primera fila no las tiene
+            try:
+                first_row = worksheet.row_values(1)
+                if not first_row or first_row[:len(headers)] != headers:
+                    worksheet.update([headers], 'A1', value_input_option='RAW')
+                    print(f"✅ Cabeceras actualizadas en '{worksheet_name}'")
+            except Exception as e:
+                print(f"⚠️ No se pudieron actualizar cabeceras (no crítico): {e}")
+    except Exception as e:
+        print(f"⚠️ No se pudo verificar/redimensionar columnas de '{worksheet_name}': {type(e).__name__}: {e}")
+        # Continuamos igualmente — append_rows intentará escribir
+
+    return worksheet
 
 # =============================================================
 # FUNCIONES AUXILIARES PARA GOOGLE SHEETS
@@ -754,11 +721,34 @@ def ai_suggest():
         selection = data.get("selection", "")
         policy = data.get("policy", "")
 
-        # Construir prompt basado en contexto
+        # Construir prompt: devuelve fragmentos de texto listo para copiar/pegar,
+        # no ideas ni sugerencias abstractas sobre qué escribir.
+        system_prompt = (
+            "Eres un asistente de redacción académica en español. "
+            "Tu tarea es escribir fragmentos de texto concretos y listos para copiar y pegar, "
+            "acordes con lo que el usuario ya ha escrito. "
+            "NUNCA expliques qué podría escribir el usuario ni des consejos. "
+            "SÓLO escribe el fragmento de texto directamente, como si fuera parte del texto del usuario. "
+            "El fragmento debe ser natural, fluido y coherente con el texto existente."
+        )
         if selection:
-            prompt = f"El usuario está escribiendo sobre cómo sus estudios le ayudarán en el futuro. Ha seleccionado este texto: '{selection}'. Proporciona una sugerencia breve (máximo 20 palabras) para mejorar o reescribir esta parte. Responde solo con la sugerencia, sin explicaciones adicionales."
+            # Reescribir la selección manteniendo el sentido pero mejorando la redacción
+            prompt = (
+                f"El usuario escribe sobre cómo sus estudios le ayudarán en el futuro. "
+                f"Texto completo hasta ahora:\n\"{text[:400]}\"\n\n"
+                f"Ha seleccionado esta parte para mejorarla: \"{selection}\"\n\n"
+                f"Reescribe esa parte seleccionada con mejor redacción. "
+                f"Devuelve SÓLO el fragmento reescrito (máximo 40 palabras), sin comillas ni explicaciones."
+            )
         else:
-            prompt = f"El usuario está escribiendo sobre cómo sus estudios le ayudarán en el futuro. Lleva escrito esto hasta ahora: '{text[:200]}...'. Proporciona una sugerencia breve (máximo 20 palabras) de qué podría añadir para enriquecer el texto. Responde solo con la sugerencia, sin explicaciones adicionales."
+            # Continuar el texto con un fragmento concreto
+            prompt = (
+                f"El usuario escribe sobre cómo sus estudios le ayudarán en el futuro. "
+                f"Lo que lleva escrito hasta ahora:\n\"{text[:400]}\"\n\n"
+                f"Escribe una oración o frase corta (máximo 30 palabras) que continúe o complemente "
+                f"de forma natural lo que ya ha escrito. "
+                f"Devuelve SÓLO el fragmento, sin comillas ni explicaciones."
+            )
 
         # Llamar a OpenAI API con manejo robusto de errores
         try:
@@ -771,10 +761,10 @@ def ai_suggest():
                 json={
                     "model": "gpt-4o-mini",
                     "messages": [
-                        {"role": "system", "content": "Eres un asistente de escritura académica. Das sugerencias breves y útiles."},
+                        {"role": "system", "content": system_prompt},
                         {"role": "user", "content": prompt}
                     ],
-                    "max_tokens": 100,
+                    "max_tokens": 80,
                     "temperature": 0.7
                 },
                 timeout=10
