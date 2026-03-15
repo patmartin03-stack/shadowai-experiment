@@ -39,6 +39,7 @@
   let idleMs = 0;
   let lastActivityAt = Date.now();
   let idleTimer = null;
+  let _idleBump = null; // Referencia fija para poder eliminar los listeners de idle
   let screenStartTime = Date.now(); // Tiempo de inicio de cada pantalla
 
   // ====== Sistema de envío de eventos en batch ======
@@ -97,32 +98,42 @@
   // Flush forzado + esperar a que se complete (para momentos críticos como finalize)
   async function flushAndWait() {
     await flushEventBuffer();
-    // También pedirle al servidor que escriba lo pendiente
+    // Pedirle al servidor que escriba en Google Sheets lo que tiene en cola
     try {
       await fetch('/flush-events', { method: 'POST' });
     } catch (e) {
       console.warn('⚠️ flush-events failed:', e.message);
     }
+    // Segundo intento por si el primer flush del buffer local falló y re-encoló eventos
+    if (eventBuffer.length > 0) {
+      await flushEventBuffer();
+    }
   }
 
   // Arranca contador de inactividad (inactividad >2s suma)
   function startIdleWatch(){
-    stopIdleWatch();
+    stopIdleWatch(); // Limpia siempre listeners y timer previos antes de añadir nuevos
     lastActivityAt = Date.now();
     idleMs = 0;
-    const bump = () => { lastActivityAt = Date.now(); };
-    window.addEventListener('mousemove', bump, { capture:true, passive:true });
-    window.addEventListener('keydown', bump, { capture:true, passive:true });
-    window.addEventListener('click', bump, { capture:true, passive:true });
-    window.addEventListener('touchstart', bump, { capture:true, passive:true });
+    _idleBump = () => { lastActivityAt = Date.now(); };
+    window.addEventListener('mousemove',   _idleBump, { capture:true, passive:true });
+    window.addEventListener('keydown',     _idleBump, { capture:true, passive:true });
+    window.addEventListener('click',       _idleBump, { capture:true, passive:true });
+    window.addEventListener('touchstart',  _idleBump, { capture:true, passive:true });
     idleTimer = setInterval(() => {
       const since = Date.now() - lastActivityAt;
       if (since > 2000) idleMs += 1000;
     }, 1000);
   }
   function stopIdleWatch(){
-    if (idleTimer) clearInterval(idleTimer);
-    idleTimer = null;
+    if (idleTimer) { clearInterval(idleTimer); idleTimer = null; }
+    if (_idleBump) {
+      window.removeEventListener('mousemove',  _idleBump, { capture:true });
+      window.removeEventListener('keydown',    _idleBump, { capture:true });
+      window.removeEventListener('click',      _idleBump, { capture:true });
+      window.removeEventListener('touchstart', _idleBump, { capture:true });
+      _idleBump = null;
+    }
   }
 
   // ====== jsPsych setup ======
@@ -138,8 +149,7 @@
       // No enviar el objeto 't' completo porque tiene referencias circulares
       await sendLog('screen_enter', {
         trial_index: jsPsych.getProgress().current_trial_global,
-        trial_type: t.type?.name || 'unknown',
-        timestamp: screenStartTime
+        trial_type: t.type?.name || 'unknown'
       });
       // contar clics dentro del trial
       document.addEventListener('click', clickBump, { once:false });
@@ -800,62 +810,52 @@
     type: jsPsychCallFunction,
     async: true,
     func: async (done) => {
-      const demographics = {
-        dob: store.dob,
-        sex: store.sex,
-        studies: store.basicStudies,
-        grad_year: store.gradYear,
-        ...store.demographics,
-        policy: assignedPolicy.key
-      };
-      const results = {
-        task_text: store.task_text,
-        words: wordsOf(store.task_text),
-        edits: store.task_edits,
-        ai_usage: store.ai_usage,
-        control: store.control,
-        personality: store.personality,
-        ai_motivation: store.ai_motivation
-      };
+      try {
+        const demographics = {
+          dob: store.dob,
+          sex: store.sex,
+          studies: store.basicStudies,
+          grad_year: store.gradYear,
+          ...store.demographics,
+          policy: assignedPolicy.key
+        };
+        const results = {
+          task_text: store.task_text,
+          words: wordsOf(store.task_text),
+          edits: store.task_edits,
+          ai_usage: store.ai_usage,
+          // Métricas conductuales (automáticas, no autoreportadas)
+          ai_chars_inserted: store.ai_text_inserted,
+          paste_count: store.paste_count,
+          paste_total_chars: store.paste_total_chars,
+          control: store.control,
+          personality: store.personality,
+          ai_motivation: store.ai_motivation
+        };
 
-      // Debug: verificar que task_text tiene contenido
-      console.log('📝 Enviando datos finales:', {
-        task_text_length: store.task_text?.length || 0,
-        words: results.words,
-        subject_id: subject_id
-      });
+        // IMPORTANTE: Flush todos los eventos pendientes antes de finalizar
+        await flushAndWait();
 
-      // IMPORTANTE: Flush todos los eventos pendientes antes de finalizar
-      console.log('🔄 Flushing eventos pendientes antes de finalizar...');
-      await flushAndWait();
+        // Enviar datos finales con reintentos (3 intentos con backoff exponencial)
+        const result = await fetchWithRetry('/finalize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subject_id, demographics, results })
+        }, 3);
 
-      // Intentar enviar con reintentos
-      const result = await fetchWithRetry('/finalize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subject_id, demographics, results })
-      }, 3); // 3 intentos máximo
+        // Registrar resultado del intento de finalización
+        await sendLog('finalize_sent', {
+          success: result.ok,
+          error: result.ok ? null : result.error
+        }).catch(() => {});
 
-      if (result.ok) {
-        if (result.data && result.data.finalized) {
-          console.log('✅ Datos guardados correctamente');
-        } else {
-          console.warn('⚠️ Respuesta exitosa pero datos posiblemente no guardados:', result.data);
-        }
-      } else {
-        console.error('❌ Error crítico: No se pudieron guardar los datos después de 3 intentos');
-        console.error('   Error:', result.error);
-        // En un escenario de producción, podrías mostrar un mensaje al usuario
-        // o guardar los datos localmente para recuperación posterior
+        // Flush final para que el evento finalize_sent también llegue al servidor
+        await flushAndWait();
+      } catch (unexpectedError) {
+        console.error('❌ Error inesperado en finalizeCall:', unexpectedError);
+      } finally {
+        done(); // Siempre llamar done() para que jsPsych no se quede colgado
       }
-
-      // Registrar intento de finalización
-      await sendLog('finalize_sent', {
-        success: result.ok,
-        error: result.ok ? null : result.error
-      }).catch(() => {});
-
-      done();
     }
   };
 

@@ -225,23 +225,37 @@ def sanitize_for_sheets(value):
 # =============================================================
 _sheets_cache = {
     "client": None,
-    "worksheets": {},       # worksheet_name → worksheet object
-    "last_auth": 0          # timestamp de última autenticación
+    "worksheets": {},         # worksheet_name → worksheet object
+    "last_auth": 0,           # timestamp de última autenticación exitosa
+    "last_auth_failure": 0    # timestamp del último fallo de autenticación
 }
 import time as _time
 
-AUTH_TTL = 300  # Reautenticar cada 5 minutos
+AUTH_TTL = 300           # Reautenticar cada 5 minutos
+AUTH_FAILURE_COOLDOWN = 60  # Esperar 60s antes de reintentar tras fallo de auth
 
 def get_cached_client():
     """Obtiene cliente de Google Sheets con caché (evita autenticar en cada request)"""
     now = _time.time()
+
+    # Cooldown tras fallo de auth: no bombardear la API si las credenciales fallan
+    if (_sheets_cache["last_auth_failure"] > 0 and
+            (now - _sheets_cache["last_auth_failure"]) < AUTH_FAILURE_COOLDOWN):
+        return _sheets_cache["client"]  # None si no hay cliente válido todavía
+
+    # Cliente válido y TTL no vencido
     if _sheets_cache["client"] and (now - _sheets_cache["last_auth"]) < AUTH_TTL:
         return _sheets_cache["client"]
+
     client = get_google_sheets_client()
     if client:
         _sheets_cache["client"] = client
         _sheets_cache["last_auth"] = now
+        _sheets_cache["last_auth_failure"] = 0
         _sheets_cache["worksheets"] = {}  # Limpiar worksheets al reautenticar
+    else:
+        _sheets_cache["last_auth_failure"] = now
+        print(f"⚠️ get_cached_client: auth fallida, cooldown de {AUTH_FAILURE_COOLDOWN}s")
     return client
 
 def get_cached_worksheet(client, sheet_name, worksheet_name, headers):
@@ -260,66 +274,84 @@ import threading
 
 _events_lock = threading.Lock()
 _events_queue = []
+_flush_lock   = threading.Lock()   # Evita flushes concurrentes (escrituras duplicadas)
+
+EVENTS_HEADERS = ["timestamp", "subject_id", "policy", "event", "trial_index",
+                   "time_on_screen_sec", "element_clicked", "payload_json"]
 
 def flush_events():
-    """Escribe todos los eventos pendientes a Google Sheets de una sola vez"""
-    with _events_lock:
-        if not _events_queue:
-            return True
-        batch = list(_events_queue)
-        _events_queue.clear()
+    """Escribe todos los eventos pendientes a Google Sheets.
+    Usa _flush_lock para evitar ejecuciones simultáneas que puedan duplicar datos.
+    Los eventos que fallen se re-insertan AL INICIO de la cola para preservar el orden."""
 
-    if not batch:
-        return True
+    # Intentar adquirir el lock sin bloquear; si ya hay un flush en curso, salir
+    acquired = _flush_lock.acquire(blocking=True, timeout=25)
+    if not acquired:
+        print("⚠️ flush_events: timeout esperando lock, omitiendo este ciclo")
+        return False
 
+    batch = []
     try:
+        with _events_lock:
+            if not _events_queue:
+                return True
+            batch = list(_events_queue)
+            _events_queue.clear()
+
         client = get_cached_client()
         if not client:
-            print(f"⚠️ flush_events: Google Sheets no disponible, {len(batch)} eventos perdidos")
+            print(f"⚠️ flush_events: Google Sheets no disponible, {len(batch)} eventos re-encolados")
+            with _events_lock:
+                _events_queue[:0] = batch   # Prepend: preserva orden cronológico
             return False
 
-        headers = ["timestamp", "subject_id", "policy", "event", "trial_index",
-                    "time_on_screen_sec", "element_clicked", "payload_json"]
-        worksheet = get_cached_worksheet(client, GOOGLE_SHEET_NAME, "events", headers)
+        worksheet = get_cached_worksheet(client, GOOGLE_SHEET_NAME, "events", EVENTS_HEADERS)
         if not worksheet:
-            print(f"⚠️ flush_events: No se pudo obtener worksheet, {len(batch)} eventos perdidos")
+            print(f"⚠️ flush_events: worksheet no disponible, {len(batch)} eventos re-encolados")
+            with _events_lock:
+                _events_queue[:0] = batch
+            _sheets_cache["worksheets"].pop("events", None)
             return False
 
-        # Insertar todas las filas de golpe con batch update
         try:
             worksheet.append_rows(batch, value_input_option='RAW')
             print(f"✅ flush_events: {len(batch)} eventos guardados en Google Sheets")
             return True
         except gspread.exceptions.APIError as e:
-            print(f"⚠️ flush_events: Error de API insertando {len(batch)} eventos: {e}")
-            # Re-encolar los eventos que fallaron
+            print(f"⚠️ flush_events: APIError insertando {len(batch)} eventos: {e}")
             with _events_lock:
-                _events_queue.extend(batch)
-            # Invalidar caché por si el problema es de autenticación
+                _events_queue[:0] = batch
             _sheets_cache["worksheets"].pop("events", None)
             return False
         except Exception as e:
-            print(f"⚠️ flush_events: Error insertando {len(batch)} eventos: {type(e).__name__}: {e}")
+            print(f"⚠️ flush_events: error insertando {len(batch)} eventos: {type(e).__name__}: {e}")
             with _events_lock:
-                _events_queue.extend(batch)
+                _events_queue[:0] = batch
             _sheets_cache["worksheets"].pop("events", None)
             return False
 
     except Exception as e:
-        print(f"⚠️ flush_events: Error inesperado: {type(e).__name__}: {e}")
+        print(f"⚠️ flush_events: error inesperado: {type(e).__name__}: {e}")
+        if batch:
+            with _events_lock:
+                _events_queue[:0] = batch
         return False
+    finally:
+        _flush_lock.release()
 
 # Timer para flush periódico
 _flush_timer = None
+_flush_timer_lock = threading.Lock()  # Evita crear múltiples timers
 
 def schedule_flush():
-    """Programa un flush de eventos cada 10 segundos"""
+    """Programa un flush de eventos cada 10 segundos (solo un timer activo a la vez)"""
     global _flush_timer
-    if _flush_timer:
-        _flush_timer.cancel()
-    _flush_timer = threading.Timer(10.0, _do_periodic_flush)
-    _flush_timer.daemon = True
-    _flush_timer.start()
+    with _flush_timer_lock:
+        if _flush_timer and _flush_timer.is_alive():
+            return  # Ya hay un timer activo
+        _flush_timer = threading.Timer(10.0, _do_periodic_flush)
+        _flush_timer.daemon = True
+        _flush_timer.start()
 
 def _do_periodic_flush():
     """Ejecuta flush periódico y reprograma"""
@@ -419,20 +451,40 @@ def flush_events_endpoint():
 def _build_event_row(data):
     """Construye una fila de evento a partir del JSON recibido"""
     timestamp = data.get("ts") or datetime.utcnow().isoformat()
-    payload = data.get("payload", {})
-    trial_index = payload.get("trial_index", "") if isinstance(payload, dict) else ""
-    time_on_screen_sec = payload.get("time_on_screen_seconds", "") if isinstance(payload, dict) else ""
+    payload   = data.get("payload", {})
+    if not isinstance(payload, dict):
+        payload = {}
+
+    # trial_index como entero cuando es posible
+    raw_trial = payload.get("trial_index", "")
+    try:
+        trial_index = int(raw_trial) if raw_trial != "" else ""
+    except (TypeError, ValueError):
+        trial_index = raw_trial
+
+    # time_on_screen_sec como entero cuando es posible
+    raw_time = payload.get("time_on_screen_seconds", "")
+    try:
+        time_on_screen_sec = int(raw_time) if raw_time != "" else ""
+    except (TypeError, ValueError):
+        time_on_screen_sec = raw_time
 
     element_clicked = ""
-    if data.get("event") == "click" and isinstance(payload, dict) and "element" in payload:
+    if data.get("event") == "click" and "element" in payload:
         elem = payload.get("element", {})
         if isinstance(elem, dict):
-            tag = elem.get('tag') or ''
-            elem_id = elem.get('id') or ''
-            elem_class = elem.get('class') or ''
-            id_part = f"#{elem_id}" if elem_id else ''
-            class_part = f".{elem_class}" if elem_class else ''
+            tag       = elem.get('tag') or ''
+            elem_id   = elem.get('id') or ''
+            elem_class= elem.get('class') or ''
+            id_part   = f"#{elem_id}"    if elem_id    else ''
+            class_part= f".{elem_class}" if elem_class else ''
             element_clicked = f"{tag}{id_part}{class_part}"
+
+    # Serializar payload de forma segura
+    try:
+        payload_json = json.dumps(payload, ensure_ascii=False)
+    except (TypeError, ValueError):
+        payload_json = json.dumps({k: str(v) for k, v in payload.items()})
 
     return [
         timestamp,
@@ -442,7 +494,7 @@ def _build_event_row(data):
         trial_index,
         time_on_screen_sec,
         element_clicked,
-        json.dumps(payload) if payload else "{}"
+        payload_json
     ]
 
 # =============================================================
@@ -510,7 +562,9 @@ def finalize():
             "dob", "sex", "studies", "grad_year", "uni", "field", "gpa",
             # Tarea
             "task_text", "words", "edit_count",
-            # Uso de IA
+            # Métricas conductuales de IA y copy/paste (registradas automáticamente)
+            "ai_chars_inserted", "paste_count", "paste_total_chars",
+            # Declaración de uso de IA (autoreportado)
             "ai_generated_pct", "ai_paraphrased_pct",
             # Control
             "noticed_policy", "used_ai_button", "used_external_ai",
@@ -529,18 +583,18 @@ def finalize():
             return jsonify({"ok": False, "error": "No se pudo acceder a la hoja de resultados"}), 503
 
         # Extraer datos de forma segura
-        ai_usage = results.get("ai_usage", {}) if isinstance(results.get("ai_usage"), dict) else {}
-        control = results.get("control", {}) if isinstance(results.get("control"), dict) else {}
-        personality = results.get("personality", {}) if isinstance(results.get("personality"), dict) else {}
-        ai_motivation = results.get("ai_motivation", {}) if isinstance(results.get("ai_motivation"), dict) else {}
-        edits = results.get("edits", []) if isinstance(results.get("edits"), list) else []
+        ai_usage     = results.get("ai_usage", {})     if isinstance(results.get("ai_usage"),     dict) else {}
+        control      = results.get("control", {})      if isinstance(results.get("control"),      dict) else {}
+        personality  = results.get("personality", {})  if isinstance(results.get("personality"),  dict) else {}
+        ai_motivation= results.get("ai_motivation", {})if isinstance(results.get("ai_motivation"),dict) else {}
+        edits        = results.get("edits", [])        if isinstance(results.get("edits"),        list) else []
 
-        # Preparar fila con todos los datos
+        # Preparar fila con todos los datos (debe coincidir exactamente con headers)
         row = [
             datetime.utcnow().isoformat(),
             subject_id,
             demographics.get("policy", ""),
-            # Demográficos (city eliminado del cuestionario)
+            # Demográficos
             demographics.get("dob", ""),
             demographics.get("sex", ""),
             demographics.get("studies", ""),
@@ -548,22 +602,26 @@ def finalize():
             demographics.get("uni", ""),
             demographics.get("field", ""),
             demographics.get("gpa", ""),
-            # Tarea (task_text es la variable que definimos arriba)
-            task_text,  # El texto completo de la tarea
+            # Tarea
+            task_text,
             results.get("words", 0),
             len(edits),
-            # Uso de IA
+            # Métricas conductuales
+            results.get("ai_chars_inserted", 0),
+            results.get("paste_count", 0),
+            results.get("paste_total_chars", 0),
+            # Declaración autoreportada
             ai_usage.get("generated_pct", 0),
             ai_usage.get("paraphrased_pct", 0),
             # Control
             control.get("noticed_policy", ""),
             control.get("used_ai_button", ""),
             control.get("used_external_ai", ""),
-            # Personalidad (Sobre tu forma de trabajar)
+            # Personalidad
             personality.get("q1", ""),
             personality.get("q2", ""),
             personality.get("q3", ""),
-            # Actitudes hacia la IA (Qué piensas de la IA)
+            # Actitudes hacia la IA
             ai_motivation.get("overconfidence_1", ""),
             ai_motivation.get("overconfidence_2", ""),
             ai_motivation.get("norm_internalization_1", ""),
@@ -574,17 +632,32 @@ def finalize():
             ai_motivation.get("peer_group_2", "")
         ]
 
-        # Insertar fila con manejo robusto de errores
-        try:
-            worksheet.append_row(row, value_input_option='RAW')
-            print(f"✅ Datos finales guardados exitosamente para {subject_id}")
-            return jsonify({"ok": True, "finalized": True}), 200
-        except gspread.exceptions.APIError as e:
-            print(f"⚠️ ERROR CRÍTICO de API en /finalize: {e}")
-            return jsonify({"ok": False, "error": f"Error de Google Sheets API: {str(e)}"}), 503
-        except Exception as e:
-            print(f"⚠️ ERROR CRÍTICO insertando fila en /finalize: {type(e).__name__}: {e}")
-            return jsonify({"ok": False, "error": f"Error guardando datos: {str(e)}"}), 500
+        # Verificar coherencia entre headers y fila antes de escribir
+        if len(row) != len(headers):
+            print(f"⚠️ INCONSISTENCIA en /finalize: {len(row)} valores vs {len(headers)} headers")
+            return jsonify({"ok": False, "error": "Error interno: longitud de fila incorrecta"}), 500
+
+        # Insertar con reintentos (hasta 3 intentos con backoff exponencial)
+        last_error = None
+        for attempt in range(3):
+            try:
+                worksheet.append_row(row, value_input_option='RAW')
+                print(f"✅ Datos finales guardados para {subject_id} (intento {attempt+1})")
+                return jsonify({"ok": True, "finalized": True}), 200
+            except gspread.exceptions.APIError as e:
+                last_error = str(e)
+                print(f"⚠️ /finalize APIError intento {attempt+1}/3: {e}")
+                _sheets_cache["worksheets"].pop("results", None)
+                if attempt < 2:
+                    _time.sleep(2 ** attempt)  # 1s, 2s antes del 3er intento
+            except Exception as e:
+                last_error = f"{type(e).__name__}: {e}"
+                print(f"⚠️ /finalize error intento {attempt+1}/3: {last_error}")
+                if attempt < 2:
+                    _time.sleep(2 ** attempt)
+
+        print(f"❌ /finalize: todos los reintentos fallaron para {subject_id}: {last_error}")
+        return jsonify({"ok": False, "error": f"Error guardando datos tras 3 intentos: {last_error}"}), 503
 
     except Exception as e:
         print(f"⚠️ ERROR CRÍTICO inesperado en /finalize: {type(e).__name__}: {e}")
@@ -639,7 +712,7 @@ def ai_suggest():
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "gpt-3.5-turbo",
+                    "model": "gpt-4o-mini",
                     "messages": [
                         {"role": "system", "content": "Eres un asistente de escritura académica. Das sugerencias breves y útiles."},
                         {"role": "user", "content": prompt}
@@ -674,7 +747,7 @@ def ai_suggest():
             try:
                 error_detail = openai_response.json()
                 print(f"   Detalle: {error_detail}")
-            except:
+            except (ValueError, Exception):
                 pass
             return jsonify({"ok": False, "error": f"Error del servicio de IA (código {openai_response.status_code})"}), 503
 
