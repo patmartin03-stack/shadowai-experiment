@@ -331,7 +331,7 @@
         <p>Redacta un texto entre <strong>60 y 120 palabras</strong>.</p>
         <textarea class="input" id="task_text" rows="10" placeholder="Escribe aquí…"></textarea>
         <div class="task-tools">
-          ${assignedPolicy.showAIButton ? '<button id="ai_help" class="btn-outline" type="button" title="Si seleccionas una frase y solicitas ayuda, ofrece una frase alternativa. Si simplemente clickeas, proporciona una frase o definición para continuar.">Ayuda de IA</button>' : '<span></span>'}
+          ${assignedPolicy.showAIButton ? '<button id="ai_help" class="btn-outline" type="button" title="Selecciona texto para reescribirlo, o pulsa sin seleccionar para obtener una frase que puedas insertar directamente.">Ayuda de IA</button>' : '<span></span>'}
           <span id="word_count" class="muted">0 palabras</span>
         </div>
         <div id="ai_suggestions" class="suggestions hidden"></div>
@@ -469,7 +469,7 @@
             // Mostrar sugerencia como botón clickeable
             panel.innerHTML = `
               <div style="display:flex; flex-direction:column; gap:8px; width:100%;">
-                <p class="muted" style="margin:0; font-size:0.9em;">Sugerencia de IA:</p>
+                <p class="muted" style="margin:0; font-size:0.9em;">Haz clic para insertar:</p>
                 <button class="chip ai-chip" type="button" style="text-align:left; white-space:normal;">${suggestion}</button>
               </div>
             `;
