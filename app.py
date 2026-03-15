@@ -427,7 +427,12 @@ def _build_event_row(data):
     if data.get("event") == "click" and isinstance(payload, dict) and "element" in payload:
         elem = payload.get("element", {})
         if isinstance(elem, dict):
-            element_clicked = f"{elem.get('tag', '')}#{elem.get('id', '')} .{elem.get('class', '')}"
+            tag = elem.get('tag') or ''
+            elem_id = elem.get('id') or ''
+            elem_class = elem.get('class') or ''
+            id_part = f"#{elem_id}" if elem_id else ''
+            class_part = f".{elem_class}" if elem_class else ''
+            element_clicked = f"{tag}{id_part}{class_part}"
 
     return [
         timestamp,

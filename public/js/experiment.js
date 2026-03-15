@@ -137,7 +137,7 @@
       startIdleWatch();
       // No enviar el objeto 't' completo porque tiene referencias circulares
       await sendLog('screen_enter', {
-        index: jsPsych.getProgress().current_trial_global+1,
+        trial_index: jsPsych.getProgress().current_trial_global,
         trial_type: t.type?.name || 'unknown',
         timestamp: screenStartTime
       });
@@ -197,6 +197,7 @@
 
     // Fire and forget - no esperamos respuesta para no bloquear
     sendLog('click', {
+      trial_index: jsPsych.getProgress().current_trial_global,
       since_prev_click_ms: delta,
       element: elementInfo,
       screen_time_ms: now - screenStartTime
@@ -391,6 +392,9 @@
           const start = ta.selectionStart, end = ta.selectionEnd;
           const selection = end > start ? ta.value.slice(start, end) : '';
 
+          // Registrar el clic al botón inmediatamente, antes de llamar a la API
+          sendLog('ai_help_open', { has_selection: selection.length > 0 }).catch(() => {});
+
           try {
             const response = await fetch('/ai-suggest', {
               method: 'POST',
@@ -481,8 +485,6 @@
                 replaced_selection: selection.length > 0
               }).catch(() => {});
             });
-
-            sendLog('ai_help_open', { has_selection: selection.length > 0 });
 
           } catch (error) {
             panel.innerHTML = '<p class="muted" style="color:red;">Error al obtener sugerencia. Inténtalo de nuevo.</p>';
