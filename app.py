@@ -445,38 +445,55 @@ def log_event():
         print(f"⚠️ ERROR inesperado en /log: {type(e).__name__}: {e}")
         return jsonify({"ok": True, "queued": False, "error": str(e)}), 200
 
-# ENDPOINT 1b: /log-batch  → recibe múltiples eventos de golpe
+# ENDPOINT 1b: /log-batch  → recibe múltiples eventos y los escribe directamente a Sheets
 @app.route("/log-batch", methods=["POST"])
 def log_batch():
     try:
         if not request.is_json and not request.data:
-            return jsonify({"ok": True, "queued": 0}), 200
+            return jsonify({"ok": True, "written": 0}), 200
 
         try:
             data = request.get_json(force=True)
         except Exception:
-            return jsonify({"ok": True, "queued": 0, "error": "JSON inválido"}), 200
+            return jsonify({"ok": False, "error": "JSON inválido"}), 400
 
         events = data if isinstance(data, list) else data.get("events", [])
         if not events:
-            return jsonify({"ok": True, "queued": 0}), 200
+            return jsonify({"ok": True, "written": 0}), 200
 
         rows = [_build_event_row(evt) for evt in events if isinstance(evt, dict)]
+        if not rows:
+            return jsonify({"ok": True, "written": 0}), 200
 
-        with _events_lock:
-            _events_queue.extend(rows)
-            queue_size = len(_events_queue)
+        # Escribir directamente a Google Sheets (síncrono, igual que /finalize)
+        # Esto garantiza que los eventos no se pierdan si el proceso se reinicia.
+        client = get_cached_client()
+        if not client:
+            print(f"⚠️ /log-batch: Google Sheets no disponible, {len(rows)} eventos no guardados")
+            return jsonify({"ok": False, "error": "Google Sheets no disponible"}), 503
 
-        print(f"📊 /log-batch encolados: {len(rows)} eventos, cola total={queue_size}")
+        worksheet = get_cached_worksheet(client, GOOGLE_SHEET_NAME, "events", EVENTS_HEADERS)
+        if not worksheet:
+            print(f"⚠️ /log-batch: worksheet 'events' no disponible")
+            _sheets_cache["worksheets"].pop("events", None)
+            return jsonify({"ok": False, "error": "Worksheet no disponible"}), 503
 
-        # Flush inmediato
-        threading.Thread(target=flush_events, daemon=True).start()
-
-        return jsonify({"ok": True, "queued": len(rows)}), 200
+        try:
+            worksheet.append_rows(rows, value_input_option='RAW')
+            print(f"✅ /log-batch: {len(rows)} eventos escritos a Sheets")
+            return jsonify({"ok": True, "written": len(rows)}), 200
+        except gspread.exceptions.APIError as e:
+            print(f"⚠️ /log-batch: APIError escribiendo {len(rows)} eventos: {e}")
+            _sheets_cache["worksheets"].pop("events", None)
+            return jsonify({"ok": False, "error": f"APIError: {e}"}), 503
+        except Exception as e:
+            print(f"⚠️ /log-batch: Error escribiendo {len(rows)} eventos: {type(e).__name__}: {e}")
+            _sheets_cache["worksheets"].pop("events", None)
+            return jsonify({"ok": False, "error": str(e)}), 503
 
     except Exception as e:
         print(f"⚠️ ERROR en /log-batch: {type(e).__name__}: {e}")
-        return jsonify({"ok": True, "queued": 0, "error": str(e)}), 200
+        return jsonify({"ok": False, "error": str(e)}), 503
 
 # ENDPOINT 1c: /flush-events  → fuerza escritura de todos los eventos pendientes
 @app.route("/flush-events", methods=["POST"])
