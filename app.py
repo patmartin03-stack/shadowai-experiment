@@ -7,7 +7,6 @@ from datetime import datetime
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import gspread
-from google.oauth2.service_account import Credentials
 
 # =============================================================
 # CONFIGURACIÓN — VARIABLES DE ENTORNO
@@ -86,26 +85,18 @@ def get_google_sheets_client():
             print(f"⚠️ ERROR: Credenciales falta claves requeridas: {', '.join(missing_keys)}")
             return None
 
-        # Crear credenciales
+        # Conectar con Google Sheets usando service_account_from_dict (compatible gspread 5.x y 6.x)
         scopes = [
             'https://www.googleapis.com/auth/spreadsheets',
             'https://www.googleapis.com/auth/drive'
         ]
         try:
-            credentials = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-        except ValueError as e:
-            print(f"⚠️ ERROR: Credenciales de servicio inválidas: {e}")
-            return None
-        except Exception as e:
-            print(f"⚠️ ERROR: Error creando credenciales: {type(e).__name__}: {e}")
-            return None
-
-        # Conectar con Google Sheets (gspread 6+: usar Client(auth=) en lugar de authorize())
-        try:
-            client = gspread.Client(auth=credentials)
+            client = gspread.service_account_from_dict(creds_dict, scopes=scopes)
+            # Verificar que el cliente funciona intentando listar spreadsheets
+            print(f"✅ Google Sheets autenticado como: {creds_dict.get('client_email', '?')}")
             return client
         except Exception as e:
-            print(f"⚠️ ERROR: Error autorizando con Google Sheets: {type(e).__name__}: {e}")
+            print(f"⚠️ ERROR: Error autenticando con Google Sheets: {type(e).__name__}: {e}")
             return None
 
     except Exception as e:
@@ -371,6 +362,55 @@ CORS(app)
 # RUTAS API (deben ir ANTES de las rutas estáticas)
 # =============================================================
 
+# ENDPOINT 0: /health  → diagnóstico de conexión a Google Sheets
+@app.route("/health", methods=["GET"])
+def health_check():
+    """Endpoint de diagnóstico: verifica conexión a Google Sheets y estado del sistema"""
+    status = {
+        "server": "ok",
+        "gspread_version": getattr(gspread, '__version__', 'unknown'),
+        "google_sheets_configured": bool(GOOGLE_SHEETS_CREDENTIALS),
+        "openai_configured": bool(OPENAI_API_KEY),
+        "events_in_queue": len(_events_queue),
+        "cache_client": _sheets_cache["client"] is not None,
+        "cache_worksheets": list(_sheets_cache["worksheets"].keys()),
+    }
+
+    # Intentar conectar a Google Sheets
+    try:
+        client = get_cached_client()
+        if client:
+            status["sheets_auth"] = "ok"
+            try:
+                spreadsheet = client.open(GOOGLE_SHEET_NAME)
+                status["spreadsheet"] = "ok"
+                status["spreadsheet_name"] = GOOGLE_SHEET_NAME
+                worksheets = [ws.title for ws in spreadsheet.worksheets()]
+                status["worksheets_found"] = worksheets
+
+                # Verificar hoja de eventos
+                if "events" in worksheets:
+                    events_ws = spreadsheet.worksheet("events")
+                    status["events_rows"] = events_ws.row_count
+                    status["events_last_row"] = len(events_ws.get_all_values())
+
+                # Verificar hoja de resultados
+                if "results" in worksheets:
+                    results_ws = spreadsheet.worksheet("results")
+                    status["results_rows"] = results_ws.row_count
+                    status["results_last_row"] = len(results_ws.get_all_values())
+                else:
+                    status["results_sheet"] = "NO EXISTE - se creará en el primer /finalize"
+
+            except Exception as e:
+                status["spreadsheet"] = f"error: {type(e).__name__}: {e}"
+        else:
+            status["sheets_auth"] = "FAILED - no se pudo autenticar"
+    except Exception as e:
+        status["sheets_auth"] = f"error: {type(e).__name__}: {e}"
+
+    return jsonify(status), 200
+
 # ENDPOINT 1: /log  → encola evento para batch insert en Google Sheets
 @app.route("/log", methods=["POST"])
 def log_event():
@@ -405,38 +445,55 @@ def log_event():
         print(f"⚠️ ERROR inesperado en /log: {type(e).__name__}: {e}")
         return jsonify({"ok": True, "queued": False, "error": str(e)}), 200
 
-# ENDPOINT 1b: /log-batch  → recibe múltiples eventos de golpe
+# ENDPOINT 1b: /log-batch  → recibe múltiples eventos y los escribe directamente a Sheets
 @app.route("/log-batch", methods=["POST"])
 def log_batch():
     try:
         if not request.is_json and not request.data:
-            return jsonify({"ok": True, "queued": 0}), 200
+            return jsonify({"ok": True, "written": 0}), 200
 
         try:
             data = request.get_json(force=True)
         except Exception:
-            return jsonify({"ok": True, "queued": 0, "error": "JSON inválido"}), 200
+            return jsonify({"ok": False, "error": "JSON inválido"}), 400
 
         events = data if isinstance(data, list) else data.get("events", [])
         if not events:
-            return jsonify({"ok": True, "queued": 0}), 200
+            return jsonify({"ok": True, "written": 0}), 200
 
         rows = [_build_event_row(evt) for evt in events if isinstance(evt, dict)]
+        if not rows:
+            return jsonify({"ok": True, "written": 0}), 200
 
-        with _events_lock:
-            _events_queue.extend(rows)
-            queue_size = len(_events_queue)
+        # Escribir directamente a Google Sheets (síncrono, igual que /finalize)
+        # Esto garantiza que los eventos no se pierdan si el proceso se reinicia.
+        client = get_cached_client()
+        if not client:
+            print(f"⚠️ /log-batch: Google Sheets no disponible, {len(rows)} eventos no guardados")
+            return jsonify({"ok": False, "error": "Google Sheets no disponible"}), 503
 
-        print(f"📊 /log-batch encolados: {len(rows)} eventos, cola total={queue_size}")
+        worksheet = get_cached_worksheet(client, GOOGLE_SHEET_NAME, "events", EVENTS_HEADERS)
+        if not worksheet:
+            print(f"⚠️ /log-batch: worksheet 'events' no disponible")
+            _sheets_cache["worksheets"].pop("events", None)
+            return jsonify({"ok": False, "error": "Worksheet no disponible"}), 503
 
-        # Flush inmediato
-        threading.Thread(target=flush_events, daemon=True).start()
-
-        return jsonify({"ok": True, "queued": len(rows)}), 200
+        try:
+            worksheet.append_rows(rows, value_input_option='RAW')
+            print(f"✅ /log-batch: {len(rows)} eventos escritos a Sheets")
+            return jsonify({"ok": True, "written": len(rows)}), 200
+        except gspread.exceptions.APIError as e:
+            print(f"⚠️ /log-batch: APIError escribiendo {len(rows)} eventos: {e}")
+            _sheets_cache["worksheets"].pop("events", None)
+            return jsonify({"ok": False, "error": f"APIError: {e}"}), 503
+        except Exception as e:
+            print(f"⚠️ /log-batch: Error escribiendo {len(rows)} eventos: {type(e).__name__}: {e}")
+            _sheets_cache["worksheets"].pop("events", None)
+            return jsonify({"ok": False, "error": str(e)}), 503
 
     except Exception as e:
         print(f"⚠️ ERROR en /log-batch: {type(e).__name__}: {e}")
-        return jsonify({"ok": True, "queued": 0, "error": str(e)}), 200
+        return jsonify({"ok": False, "error": str(e)}), 503
 
 # ENDPOINT 1c: /flush-events  → fuerza escritura de todos los eventos pendientes
 @app.route("/flush-events", methods=["POST"])
