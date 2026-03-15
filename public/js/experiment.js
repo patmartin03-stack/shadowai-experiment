@@ -70,13 +70,15 @@
         body: JSON.stringify({ events: batch })
       });
       if (!response.ok) {
-        console.warn(`⚠️ Batch log failed:`, response.status);
-        // Re-encolar eventos que fallaron
+        console.warn(`⚠️ Batch log failed (${response.status}), reintentando en ${FLUSH_INTERVAL/1000}s`);
+        // Re-encolar eventos que fallaron y programar reintento
         eventBuffer.unshift(...batch);
+        if (!flushTimer) flushTimer = setTimeout(flushEventBuffer, FLUSH_INTERVAL);
       }
     } catch (err) {
-      console.warn(`⚠️ Batch log network error:`, err.message);
+      console.warn(`⚠️ Batch log network error:`, err.message, `— reintentando en ${FLUSH_INTERVAL/1000}s`);
       eventBuffer.unshift(...batch);
+      if (!flushTimer) flushTimer = setTimeout(flushEventBuffer, FLUSH_INTERVAL);
     }
   }
 
@@ -95,18 +97,21 @@
     queueEvent(event, payload);
   }
 
-  // Flush forzado + esperar a que se complete (para momentos críticos como finalize)
-  async function flushAndWait() {
-    await flushEventBuffer();
-    // Pedirle al servidor que escriba en Google Sheets lo que tiene en cola
+  // Flush forzado con reintentos (para momentos críticos como finalize)
+  async function flushAndWait(maxAttempts = 3) {
+    for (let i = 0; i < maxAttempts; i++) {
+      if (eventBuffer.length === 0) break;
+      await flushEventBuffer();
+      if (eventBuffer.length > 0) {
+        // El flush falló y re-encoló — esperar antes de reintentar
+        await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+      }
+    }
+    // Indicar al servidor que vacíe su cola interna (por si quedó algo del endpoint /log)
     try {
       await fetch('/flush-events', { method: 'POST' });
     } catch (e) {
       console.warn('⚠️ flush-events failed:', e.message);
-    }
-    // Segundo intento por si el primer flush del buffer local falló y re-encoló eventos
-    if (eventBuffer.length > 0) {
-      await flushEventBuffer();
     }
   }
 
