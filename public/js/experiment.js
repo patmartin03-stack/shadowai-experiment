@@ -15,19 +15,19 @@
     {
       key:'permisiva',
       label:'Permisiva',
-      description: 'Puedes usar libremente cualquier herramienta de inteligencia artificial para ayudarte en esta tarea, siempre que lo declares al finalizar.',
+      description: 'Para la realización de este trabajo puedes utilizar libremente el asistente de IA integrado en la plataforma, así como cualquier otra herramienta de IA externa. No es necesario que declares su uso en la entrega.',
       showAIButton: true
     },
     {
       key:'difusa',
       label:'Difusa',
-      description: 'Puedes usar herramientas de inteligencia artificial si lo consideras necesario, pero procura mantener tu propio criterio y estilo en el texto.',
+      description: 'Para la realización de este trabajo tienes disponible el asistente de IA integrado en la plataforma. Valora tú mismo/a en qué medida su uso es apropiado para cada parte de la tarea, teniendo en cuenta que el trabajo debe reflejar tu propio aprendizaje.',
       showAIButton: true
     },
     {
       key:'restrictiva',
       label:'Restrictiva',
-      description: 'No debes usar herramientas de inteligencia artificial para completar esta tarea. Por favor, redacta el texto por tu cuenta sin ayuda de IA.',
+      description: 'Para la realización de este trabajo tienes disponible el asistente de IA integrado en la plataforma, aunque su uso no está permitido en esta tarea. El uso del asistente u otras herramientas de IA externas se considerará una infracción de integridad académica y podrá conllevar la anulación de la calificación.',
       showAIButton: true
     }
   ];
@@ -712,14 +712,28 @@
       </div>`;
   }
 
-  // ====== PANTALLA 7 — Sobre tu forma de trabajar (Likert 5 puntos horizontal) ======
+  // ====== PANTALLA 7 — Tu entorno y la IA (Likert 5 puntos + ordinal) ======
   const s7 = {
     type: jsPsychSurveyHtmlForm,
-    preamble: `<h2>Sobre tu forma de trabajar</h2><p class="muted">Indica tu nivel de acuerdo con cada afirmación<br>(1 = Totalmente en desacuerdo &nbsp;·&nbsp; 5 = Totalmente de acuerdo).</p>`,
+    preamble: `<h2>Tu entorno y la IA</h2><p class="muted">Indica tu nivel de acuerdo con cada afirmación<br>(1 = Totalmente en desacuerdo &nbsp;·&nbsp; 5 = Totalmente de acuerdo).</p>`,
     html: `
-      ${makeLikert('q1', 'Cuando una norma me parece injusta, tiendo a no cumplirla.')}
-      ${makeLikert('q2', 'Suelo subestimar el tiempo que me llevará completar una tarea.')}
-      ${makeLikert('q3', 'Me siento cómodo/a usando herramientas digitales cuando necesito ayuda.')}
+      ${makeLikert('peer_group_1',    'La mayoría de mis compañeros/as usan IA regularmente en sus tareas académicas.')}
+      ${makeLikert('peer_group_2',    'En mi entorno, usar IA para estudiar es algo habitual y aceptado.')}
+      ${makeLikert('tse_1',           'Me siento cómodo/a usando herramientas digitales cuando necesito ayuda.')}
+      ${makeLikert('detection_1',     'Creo que mi universidad puede detectar si uso IA de forma no autorizada.')}
+      ${makeLikert('norm_clarity_1',  'En mi universidad, las normas sobre uso de IA en trabajos están bien definidas y son claras.')}
+      ${makeLikert('academic_stress_1', 'Siento que la carga de mis asignaturas me exige más de lo que puedo dar.')}
+      <div class="likert-group">
+        <p class="likert-question">¿Con qué frecuencia usas herramientas de IA en tus tareas académicas actualmente?</p>
+        <select class="input" name="ai_frequency" required>
+          <option value="">Selecciona…</option>
+          <option value="1">Nunca</option>
+          <option value="2">Raramente</option>
+          <option value="3">A veces</option>
+          <option value="4">Frecuentemente</option>
+          <option value="5">Siempre</option>
+        </select>
+      </div>
     `,
     button_label: 'Continuar',
     on_finish: async (data) => {
@@ -728,19 +742,16 @@
     }
   };
 
-  // ====== PANTALLA 8B — Qué piensas de la IA (Likert 5 puntos horizontal) ======
+  // ====== PANTALLA 8B — Sobre tus valores y motivaciones (Likert 5 puntos horizontal) ======
   const s7b = {
     type: jsPsychSurveyHtmlForm,
-    preamble: `<h2>Qué piensas de la IA</h2><p class="muted">Indica tu nivel de acuerdo con cada afirmación<br>(1 = Totalmente en desacuerdo &nbsp;·&nbsp; 5 = Totalmente de acuerdo).</p>`,
+    preamble: `<h2>Sobre tus valores y motivaciones</h2><p class="muted">Indica tu nivel de acuerdo con cada afirmación<br>(1 = Totalmente en desacuerdo &nbsp;·&nbsp; 5 = Totalmente de acuerdo).</p>`,
     html: `
-      ${makeLikert('overconfidence_1',      'Cuando uso herramientas de IA, el resultado es de mejor calidad que si trabajara yo solo/a.')}
-      ${makeLikert('overconfidence_2',      'Acepto lo que me dice la IA sin necesidad de verificarlo por mi cuenta.')}
-      ${makeLikert('norm_internalization_1','Respetaría las normas sobre el uso de IA aunque nadie pudiera comprobarlo.')}
-      ${makeLikert('norm_internalization_2','Si la IA mejora mi trabajo, usarla está justificado aunque esté prohibido.')}
-      ${makeLikert('reference_group_1',    'En mi universidad, las normas sobre el uso de IA en trabajos están bien definidas y son claras.')}
-      ${makeLikert('reference_group_2',    'Mis profesores tienen una postura clara sobre qué usos de la IA son aceptables en los trabajos.')}
-      ${makeLikert('peer_group_1',         'La mayoría de mis compañeros/as usan IA regularmente en sus tareas académicas.')}
-      ${makeLikert('peer_group_2',         'En mi entorno de amigos y compañeros, usar IA para estudiar es algo habitual y aceptado.')}
+      ${makeLikert('performance_orientation_1', 'Cuando hago un trabajo académico, me importa más sacar buena nota que aprender en profundidad.')}
+      ${makeLikert('norm_internalization_1',     'Respetaría las normas sobre uso de IA aunque nadie pudiera comprobarlo.')}
+      ${makeLikert('norm_internalization_2',     'Si la IA mejora mi trabajo, usarla está justificado aunque esté prohibido.')}
+      ${makeLikert('social_comparison_1',        'Si mis compañeros usan IA sin consecuencias, no veo por qué yo no debería.')}
+      ${makeLikert('learning_harm_1',            'Usar IA para hacer un trabajo reduce lo que aprendo con esa tarea.')}
     `,
     button_label: 'Continuar',
     on_finish: async (data) => {
