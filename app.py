@@ -100,9 +100,9 @@ def get_google_sheets_client():
             print(f"⚠️ ERROR: Error creando credenciales: {type(e).__name__}: {e}")
             return None
 
-        # Conectar con Google Sheets
+        # Conectar con Google Sheets (gspread 6+: usar Client(auth=) en lugar de authorize())
         try:
-            client = gspread.authorize(credentials)
+            client = gspread.Client(auth=credentials)
             return client
         except Exception as e:
             print(f"⚠️ ERROR: Error autorizando con Google Sheets: {type(e).__name__}: {e}")
@@ -148,7 +148,7 @@ def get_or_create_worksheet(client, sheet_name, worksheet_name, headers):
             try:
                 worksheet = spreadsheet.add_worksheet(title=worksheet_name, rows=1000, cols=len(headers))
                 # Usar update para poner headers específicamente en la fila 1
-                worksheet.update('A1', [headers], value_input_option='RAW')
+                worksheet.update([headers], 'A1', value_input_option='RAW')
                 print(f"✅ Creada nueva hoja: {worksheet_name} con encabezados")
                 return worksheet
             except gspread.exceptions.APIError as e:
@@ -180,7 +180,7 @@ def get_or_create_worksheet(client, sheet_name, worksheet_name, headers):
 
                     # Usar update para escribir ESPECÍFICAMENTE en la fila 1
                     try:
-                        worksheet.update('A1', [headers], value_input_option='RAW')
+                        worksheet.update([headers], 'A1', value_input_option='RAW')
                         print(f"✅ Encabezados actualizados en fila 1 de '{worksheet_name}'")
                     except Exception as update_error:
                         print(f"⚠️ ERROR actualizando headers: {type(update_error).__name__}: {update_error}")
