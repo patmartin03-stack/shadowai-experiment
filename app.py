@@ -2,7 +2,13 @@
 # Shadow AI — Backend Flask con Google Sheets (v2.0)
 # =============================================================
 
-import os, json, requests
+import os
+import os.path
+import json
+import time as _time
+import threading
+import traceback
+import requests
 from datetime import datetime
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
@@ -159,26 +165,6 @@ def get_or_create_worksheet(client, sheet_name, worksheet_name, headers):
     return worksheet
 
 # =============================================================
-# FUNCIONES AUXILIARES PARA GOOGLE SHEETS
-# =============================================================
-def sanitize_for_sheets(value):
-    """
-    Sanitiza un valor para Google Sheets, preservando el contenido pero evitando problemas de formato.
-    - Convierte None a string vacío
-    - Convierte números y booleanos a su representación de string
-    - Para strings, preserva saltos de línea y caracteres especiales
-    """
-    if value is None:
-        return ""
-    if isinstance(value, (int, float, bool)):
-        return value  # Google Sheets maneja estos nativamente
-    if not isinstance(value, str):
-        return str(value)
-
-    # Para strings, retornar tal cual - Google Sheets API maneja el escaping automáticamente
-    return value
-
-# =============================================================
 # CACHÉ DE GOOGLE SHEETS (evita reconectar en cada request)
 # =============================================================
 _sheets_cache = {
@@ -187,49 +173,63 @@ _sheets_cache = {
     "last_auth": 0,           # timestamp de última autenticación exitosa
     "last_auth_failure": 0    # timestamp del último fallo de autenticación
 }
-import time as _time
 
-AUTH_TTL = 300           # Reautenticar cada 5 minutos
+AUTH_TTL = 300              # Reautenticar cada 5 minutos
 AUTH_FAILURE_COOLDOWN = 60  # Esperar 60s antes de reintentar tras fallo de auth
 
+_cache_lock = threading.Lock()  # Protege lectura/escritura de _sheets_cache
+_auth_lock  = threading.Lock()  # Serializa llamadas a get_google_sheets_client() (evita thundering herd)
+
 def get_cached_client():
-    """Obtiene cliente de Google Sheets con caché (evita autenticar en cada request)"""
+    """Obtiene cliente de Google Sheets con caché, thread-safe.
+    Usa double-checked locking para evitar thundering herd bajo carga concurrente."""
     now = _time.time()
 
-    # Cooldown tras fallo de auth: no bombardear la API si las credenciales fallan
-    if (_sheets_cache["last_auth_failure"] > 0 and
-            (now - _sheets_cache["last_auth_failure"]) < AUTH_FAILURE_COOLDOWN):
-        return _sheets_cache["client"]  # None si no hay cliente válido todavía
+    # Fast path: verificar bajo _cache_lock
+    with _cache_lock:
+        failure = _sheets_cache["last_auth_failure"]
+        if failure > 0 and (now - failure) < AUTH_FAILURE_COOLDOWN:
+            return _sheets_cache["client"]
+        if _sheets_cache["client"] and (now - _sheets_cache["last_auth"]) < AUTH_TTL:
+            return _sheets_cache["client"]
 
-    # Cliente válido y TTL no vencido
-    if _sheets_cache["client"] and (now - _sheets_cache["last_auth"]) < AUTH_TTL:
-        return _sheets_cache["client"]
+    # Slow path: necesitamos reautenticar; _auth_lock serializa para que solo un thread lo haga
+    with _auth_lock:
+        now = _time.time()
+        with _cache_lock:
+            failure = _sheets_cache["last_auth_failure"]
+            if failure > 0 and (now - failure) < AUTH_FAILURE_COOLDOWN:
+                return _sheets_cache["client"]
+            if _sheets_cache["client"] and (now - _sheets_cache["last_auth"]) < AUTH_TTL:
+                return _sheets_cache["client"]
 
-    client = get_google_sheets_client()
-    if client:
-        _sheets_cache["client"] = client
-        _sheets_cache["last_auth"] = now
-        _sheets_cache["last_auth_failure"] = 0
-        _sheets_cache["worksheets"] = {}  # Limpiar worksheets al reautenticar
-    else:
-        _sheets_cache["last_auth_failure"] = now
-        print(f"⚠️ get_cached_client: auth fallida, cooldown de {AUTH_FAILURE_COOLDOWN}s")
-    return client
+        client = get_google_sheets_client()
+        with _cache_lock:
+            if client:
+                _sheets_cache["client"] = client
+                _sheets_cache["last_auth"] = now
+                _sheets_cache["last_auth_failure"] = 0
+                _sheets_cache["worksheets"] = {}  # Limpiar worksheets al reautenticar
+            else:
+                _sheets_cache["last_auth_failure"] = now
+                print(f"⚠️ get_cached_client: auth fallida, cooldown de {AUTH_FAILURE_COOLDOWN}s")
+        return client
 
 def get_cached_worksheet(client, sheet_name, worksheet_name, headers):
-    """Obtiene worksheet con caché para evitar abrir/verificar en cada request"""
-    if worksheet_name in _sheets_cache["worksheets"]:
-        return _sheets_cache["worksheets"][worksheet_name]
+    """Obtiene worksheet con caché, thread-safe."""
+    with _cache_lock:
+        ws = _sheets_cache["worksheets"].get(worksheet_name)
+    if ws:
+        return ws
     ws = get_or_create_worksheet(client, sheet_name, worksheet_name, headers)
     if ws:
-        _sheets_cache["worksheets"][worksheet_name] = ws
+        with _cache_lock:
+            _sheets_cache["worksheets"][worksheet_name] = ws
     return ws
 
 # =============================================================
 # COLA DE EVENTOS PENDIENTES (batch insert)
 # =============================================================
-import threading
-
 _events_lock = threading.Lock()
 _events_queue = []
 _flush_lock   = threading.Lock()   # Evita flushes concurrentes (escrituras duplicadas)
@@ -243,9 +243,9 @@ def flush_events():
     Los eventos que fallen se re-insertan AL INICIO de la cola para preservar el orden."""
 
     # Intentar adquirir el lock sin bloquear; si ya hay un flush en curso, salir
-    acquired = _flush_lock.acquire(blocking=True, timeout=25)
+    acquired = _flush_lock.acquire(blocking=False)
     if not acquired:
-        print("⚠️ flush_events: timeout esperando lock, omitiendo este ciclo")
+        print("⚠️ flush_events: flush en curso, omitiendo este ciclo")
         return False
 
     batch = []
@@ -268,7 +268,8 @@ def flush_events():
             print(f"⚠️ flush_events: worksheet no disponible, {len(batch)} eventos re-encolados")
             with _events_lock:
                 _events_queue[:0] = batch
-            _sheets_cache["worksheets"].pop("events", None)
+            with _cache_lock:
+                _sheets_cache["worksheets"].pop("events", None)
             return False
 
         try:
@@ -279,13 +280,15 @@ def flush_events():
             print(f"⚠️ flush_events: APIError insertando {len(batch)} eventos: {e}")
             with _events_lock:
                 _events_queue[:0] = batch
-            _sheets_cache["worksheets"].pop("events", None)
+            with _cache_lock:
+                _sheets_cache["worksheets"].pop("events", None)
             return False
         except Exception as e:
             print(f"⚠️ flush_events: error insertando {len(batch)} eventos: {type(e).__name__}: {e}")
             with _events_lock:
                 _events_queue[:0] = batch
-            _sheets_cache["worksheets"].pop("events", None)
+            with _cache_lock:
+                _sheets_cache["worksheets"].pop("events", None)
             return False
 
     except Exception as e:
@@ -333,14 +336,20 @@ CORS(app)
 @app.route("/health", methods=["GET"])
 def health_check():
     """Endpoint de diagnóstico: verifica conexión a Google Sheets y estado del sistema"""
+    with _events_lock:
+        queue_size = len(_events_queue)
+    with _cache_lock:
+        cache_client  = _sheets_cache["client"] is not None
+        cache_wsheets = list(_sheets_cache["worksheets"].keys())
+
     status = {
         "server": "ok",
         "gspread_version": getattr(gspread, '__version__', 'unknown'),
         "google_sheets_configured": bool(GOOGLE_SHEETS_CREDENTIALS),
         "openai_configured": bool(OPENAI_API_KEY),
-        "events_in_queue": len(_events_queue),
-        "cache_client": _sheets_cache["client"] is not None,
-        "cache_worksheets": list(_sheets_cache["worksheets"].keys()),
+        "events_in_queue": queue_size,
+        "cache_client": cache_client,
+        "cache_worksheets": cache_wsheets,
     }
 
     # Intentar conectar a Google Sheets
@@ -442,7 +451,8 @@ def log_batch():
         worksheet = get_cached_worksheet(client, GOOGLE_SHEET_NAME, "events", EVENTS_HEADERS)
         if not worksheet:
             print(f"⚠️ /log-batch: worksheet 'events' no disponible")
-            _sheets_cache["worksheets"].pop("events", None)
+            with _cache_lock:
+                _sheets_cache["worksheets"].pop("events", None)
             return jsonify({"ok": False, "error": "Worksheet no disponible"}), 503
 
         try:
@@ -451,11 +461,13 @@ def log_batch():
             return jsonify({"ok": True, "written": len(rows)}), 200
         except gspread.exceptions.APIError as e:
             print(f"⚠️ /log-batch: APIError escribiendo {len(rows)} eventos: {e}")
-            _sheets_cache["worksheets"].pop("events", None)
+            with _cache_lock:
+                _sheets_cache["worksheets"].pop("events", None)
             return jsonify({"ok": False, "error": f"APIError: {e}"}), 503
         except Exception as e:
             print(f"⚠️ /log-batch: Error escribiendo {len(rows)} eventos: {type(e).__name__}: {e}")
-            _sheets_cache["worksheets"].pop("events", None)
+            with _cache_lock:
+                _sheets_cache["worksheets"].pop("events", None)
             return jsonify({"ok": False, "error": str(e)}), 503
 
     except Exception as e:
@@ -580,6 +592,7 @@ def finalize():
             return jsonify({"ok": False, "error": "Google Sheets no configurado - datos no guardados"}), 503
 
         # Headers para la hoja de resultados
+        # IMPORTANTE: deben coincidir EXACTAMENTE con los name= del frontend
         headers = [
             "timestamp", "subject_id", "policy",
             # Demográficos
@@ -592,13 +605,16 @@ def finalize():
             "ai_generated_pct", "ai_paraphrased_pct",
             # Control
             "noticed_policy", "used_ai_button", "used_external_ai",
-            # Personalidad (Sobre tu forma de trabajar)
-            "personality_q1", "personality_q2", "personality_q3",
-            # Actitudes hacia la IA (Qué piensas de la IA)
-            "ai_overconfidence_1", "ai_overconfidence_2",
-            "ai_norm_internalization_1", "ai_norm_internalization_2",
-            "ai_reference_group_1", "ai_reference_group_2",
-            "ai_peer_group_1", "ai_peer_group_2"
+            # Tu entorno y la IA (Pantalla 7 — coincide con name= del form)
+            "peer_group_1", "peer_group_2",
+            "tse_1", "detection_1", "norm_clarity_1",
+            "academic_stress_1", "ai_frequency",
+            # Valores y motivaciones (Pantalla 7b — coincide con name= del form)
+            "performance_orientation_1",
+            "norm_internalization_1", "norm_internalization_2",
+            "social_comparison_1", "learning_harm_1",
+            # Contacto (opcional)
+            "email"
         ]
         worksheet = get_cached_worksheet(client, GOOGLE_SHEET_NAME, "results", headers)
 
@@ -641,19 +657,22 @@ def finalize():
             control.get("noticed_policy", ""),
             control.get("used_ai_button", ""),
             control.get("used_external_ai", ""),
-            # Personalidad
-            personality.get("q1", ""),
-            personality.get("q2", ""),
-            personality.get("q3", ""),
-            # Actitudes hacia la IA
-            ai_motivation.get("overconfidence_1", ""),
-            ai_motivation.get("overconfidence_2", ""),
+            # Tu entorno y la IA (Pantalla 7)
+            personality.get("peer_group_1", ""),
+            personality.get("peer_group_2", ""),
+            personality.get("tse_1", ""),
+            personality.get("detection_1", ""),
+            personality.get("norm_clarity_1", ""),
+            personality.get("academic_stress_1", ""),
+            personality.get("ai_frequency", ""),
+            # Valores y motivaciones (Pantalla 7b)
+            ai_motivation.get("performance_orientation_1", ""),
             ai_motivation.get("norm_internalization_1", ""),
             ai_motivation.get("norm_internalization_2", ""),
-            ai_motivation.get("reference_group_1", ""),
-            ai_motivation.get("reference_group_2", ""),
-            ai_motivation.get("peer_group_1", ""),
-            ai_motivation.get("peer_group_2", "")
+            ai_motivation.get("social_comparison_1", ""),
+            ai_motivation.get("learning_harm_1", ""),
+            # Contacto (opcional)
+            data.get("email", "")
         ]
 
         # Verificar coherencia entre headers y fila antes de escribir
@@ -671,21 +690,29 @@ def finalize():
             except gspread.exceptions.APIError as e:
                 last_error = str(e)
                 print(f"⚠️ /finalize APIError intento {attempt+1}/3: {e}")
-                _sheets_cache["worksheets"].pop("results", None)
+                with _cache_lock:
+                    _sheets_cache["worksheets"].pop("results", None)
                 if attempt < 2:
                     _time.sleep(2 ** attempt)  # 1s, 2s antes del 3er intento
+                    worksheet = get_cached_worksheet(client, GOOGLE_SHEET_NAME, "results", headers)
+                    if not worksheet:
+                        last_error = "worksheet 'results' no disponible tras reintento"
+                        break
             except Exception as e:
                 last_error = f"{type(e).__name__}: {e}"
                 print(f"⚠️ /finalize error intento {attempt+1}/3: {last_error}")
                 if attempt < 2:
                     _time.sleep(2 ** attempt)
+                    worksheet = get_cached_worksheet(client, GOOGLE_SHEET_NAME, "results", headers)
+                    if not worksheet:
+                        last_error = "worksheet 'results' no disponible tras reintento"
+                        break
 
         print(f"❌ /finalize: todos los reintentos fallaron para {subject_id}: {last_error}")
         return jsonify({"ok": False, "error": f"Error guardando datos tras 3 intentos: {last_error}"}), 503
 
     except Exception as e:
         print(f"⚠️ ERROR CRÍTICO inesperado en /finalize: {type(e).__name__}: {e}")
-        import traceback
         traceback.print_exc()
         return jsonify({"ok": False, "error": f"Error del servidor: {str(e)}"}), 500
 
@@ -828,7 +855,6 @@ def ai_suggest():
 
     except Exception as e:
         print(f"⚠️ ERROR inesperado en /ai-suggest: {type(e).__name__}: {e}")
-        import traceback
         traceback.print_exc()
         return jsonify({"ok": False, "error": "Error del servidor"}), 500
 
@@ -842,7 +868,6 @@ def serve_static(path):
     try:
         # Validación de seguridad: evitar path traversal
         # Normalizar el path para eliminar .. y otros intentos de escape
-        import os.path
         normalized_path = os.path.normpath(path)
 
         # Verificar que el path no intenta escapar del directorio público

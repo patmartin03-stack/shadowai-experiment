@@ -176,14 +176,16 @@
       });
     },
     on_finish: () => {
-      // Mostrar mensaje de agradecimiento automáticamente al finalizar la pantalla 9
       const target = document.getElementById('jspsych-target');
       if (target) {
+        const ok = store._finalize_ok !== false;
         target.innerHTML = `
           <div style="display:flex;justify-content:center;align-items:center;min-height:60vh;padding:24px;">
             <div class="center">
               <h2>¡Gracias por participar!</h2>
-              <p>Tu respuesta ha sido guardada correctamente.</p>
+              <p>${ok
+                ? 'Tu respuesta ha sido guardada correctamente.'
+                : 'Hubo un problema al guardar tu respuesta. Por favor, contacta con nosotros para confirmar que se ha registrado.'}</p>
               <p class="muted">
                 Si deseas más información o retirar tus datos, escríbenos a
                 <a href="mailto:pmartinmartinez@alu.comillas.edu">pmartinmartinez@alu.comillas.edu</a>.
@@ -229,7 +231,9 @@
     // Tracking de uso de IA y copy/paste
     ai_text_inserted: 0,  // Caracteres insertados desde sugerencias de IA
     paste_count: 0,       // Número de veces que se pegó texto
-    paste_total_chars: 0  // Total de caracteres pegados
+    paste_total_chars: 0, // Total de caracteres pegados
+    email: '',            // Correo electrónico (opcional)
+    _finalize_ok: null    // Resultado de la finalización (para thank-you)
   };
 
   // ====== PANTALLA 1 — Bienvenida y consentimiento ======
@@ -343,6 +347,9 @@
     `,
     choices: ['Continuar'],
     on_load: () => {
+      // Resetear editLog para este trial (evita acumulación si la pantalla se recarga)
+      editLog = [];
+
       // deshabilita botón "Continuar" hasta llegar a 90
       const contBtn = document.querySelector('.jspsych-btn');
       contBtn.disabled = true;
@@ -466,13 +473,14 @@
               throw new Error('La sugerencia está vacía');
             }
 
-            // Mostrar sugerencia como botón clickeable
+            // Mostrar sugerencia como botón clickeable (textContent evita XSS)
             panel.innerHTML = `
               <div style="display:flex; flex-direction:column; gap:8px; width:100%;">
                 <p class="muted" style="margin:0; font-size:0.9em;">Haz clic para insertar:</p>
-                <button class="chip ai-chip" type="button" style="text-align:left; white-space:normal;">${suggestion}</button>
+                <button class="chip ai-chip" type="button" style="text-align:left; white-space:normal;"></button>
               </div>
             `;
+            panel.querySelector('.ai-chip').textContent = suggestion;
             panel.classList.remove('hidden');
 
             // Al hacer click, insertar la sugerencia
@@ -760,7 +768,29 @@
     }
   };
 
-  // ====== FINALIZE — Envío de datos al terminar pantalla 9 (invisible para el usuario) ======
+  // ====== PANTALLA FINAL — Contacto (opcional) ======
+  const sEmail = {
+    type: jsPsychSurveyHtmlForm,
+    preamble: `
+      <h2>¡Ya casi terminamos!</h2>
+      <p>Si deseas recibir más información sobre los resultados de esta investigación,
+      puedes dejarnos tu correo electrónico.</p>
+      <p class="muted">Este dato es completamente <strong>opcional</strong> y no se vinculará con tus respuestas anteriores.</p>
+    `,
+    html: `
+      <label class="label">Correo electrónico (opcional)</label>
+      <input class="input" type="email" name="email" placeholder="tu@email.com" />
+    `,
+    button_label: 'Finalizar',
+    on_finish: async (data) => {
+      store.email = (data.response.email || '').trim();
+      if (store.email) {
+        await sendLog('email_provided', { has_email: true });
+      }
+    }
+  };
+
+  // ====== FINALIZE — Envío de datos al terminar (invisible para el usuario) ======
   // Función auxiliar para reintentar con backoff exponencial
   async function fetchWithRetry(url, options, maxRetries = 3) {
     let lastError;
@@ -856,8 +886,10 @@
         const result = await fetchWithRetry('/finalize', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ subject_id, demographics, results })
+          body: JSON.stringify({ subject_id, demographics, results, email: store.email })
         }, 3);
+
+        store._finalize_ok = result.ok;
 
         // Registrar resultado del intento de finalización
         await sendLog('finalize_sent', {
@@ -876,9 +908,9 @@
   };
 
   // ====== Timeline completo ======
-  // Pantalla 10 eliminada: el finalize ocurre automáticamente tras pantalla 9 (s7b),
-  // y el mensaje de agradecimiento se muestra en el on_finish de jsPsych.
-  const timeline = [s1, s2, s3, s4, s4b, s5, s6, s7, s7b, finalizeCall];
+  // sEmail recoge contacto opcional; finalizeCall envía todo a /finalize;
+  // el mensaje de agradecimiento se muestra en el on_finish de jsPsych.
+  const timeline = [s1, s2, s3, s4, s4b, s5, s6, s7, s7b, sEmail, finalizeCall];
 
   // ¡Comenzar!
   jsPsych.run(timeline);
