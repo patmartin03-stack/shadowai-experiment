@@ -7,6 +7,7 @@ import os.path
 import json
 import time as _time
 import threading
+import traceback
 import requests
 from datetime import datetime
 from flask import Flask, request, jsonify, send_from_directory
@@ -162,26 +163,6 @@ def get_or_create_worksheet(client, sheet_name, worksheet_name, headers):
         # Continuamos igualmente — append_rows intentará escribir
 
     return worksheet
-
-# =============================================================
-# FUNCIONES AUXILIARES PARA GOOGLE SHEETS
-# =============================================================
-def sanitize_for_sheets(value):
-    """
-    Sanitiza un valor para Google Sheets, preservando el contenido pero evitando problemas de formato.
-    - Convierte None a string vacío
-    - Convierte números y booleanos a su representación de string
-    - Para strings, preserva saltos de línea y caracteres especiales
-    """
-    if value is None:
-        return ""
-    if isinstance(value, (int, float, bool)):
-        return value  # Google Sheets maneja estos nativamente
-    if not isinstance(value, str):
-        return str(value)
-
-    # Para strings, retornar tal cual - Google Sheets API maneja el escaping automáticamente
-    return value
 
 # =============================================================
 # CACHÉ DE GOOGLE SHEETS (evita reconectar en cada request)
@@ -611,6 +592,7 @@ def finalize():
             return jsonify({"ok": False, "error": "Google Sheets no configurado - datos no guardados"}), 503
 
         # Headers para la hoja de resultados
+        # IMPORTANTE: deben coincidir EXACTAMENTE con los name= del frontend
         headers = [
             "timestamp", "subject_id", "policy",
             # Demográficos
@@ -623,13 +605,16 @@ def finalize():
             "ai_generated_pct", "ai_paraphrased_pct",
             # Control
             "noticed_policy", "used_ai_button", "used_external_ai",
-            # Personalidad (Sobre tu forma de trabajar)
-            "personality_q1", "personality_q2", "personality_q3",
-            # Actitudes hacia la IA (Qué piensas de la IA)
-            "ai_overconfidence_1", "ai_overconfidence_2",
-            "ai_norm_internalization_1", "ai_norm_internalization_2",
-            "ai_reference_group_1", "ai_reference_group_2",
-            "ai_peer_group_1", "ai_peer_group_2"
+            # Tu entorno y la IA (Pantalla 7 — coincide con name= del form)
+            "peer_group_1", "peer_group_2",
+            "tse_1", "detection_1", "norm_clarity_1",
+            "academic_stress_1", "ai_frequency",
+            # Valores y motivaciones (Pantalla 7b — coincide con name= del form)
+            "performance_orientation_1",
+            "norm_internalization_1", "norm_internalization_2",
+            "social_comparison_1", "learning_harm_1",
+            # Contacto (opcional)
+            "email"
         ]
         worksheet = get_cached_worksheet(client, GOOGLE_SHEET_NAME, "results", headers)
 
@@ -672,19 +657,22 @@ def finalize():
             control.get("noticed_policy", ""),
             control.get("used_ai_button", ""),
             control.get("used_external_ai", ""),
-            # Personalidad
-            personality.get("q1", ""),
-            personality.get("q2", ""),
-            personality.get("q3", ""),
-            # Actitudes hacia la IA
-            ai_motivation.get("overconfidence_1", ""),
-            ai_motivation.get("overconfidence_2", ""),
+            # Tu entorno y la IA (Pantalla 7)
+            personality.get("peer_group_1", ""),
+            personality.get("peer_group_2", ""),
+            personality.get("tse_1", ""),
+            personality.get("detection_1", ""),
+            personality.get("norm_clarity_1", ""),
+            personality.get("academic_stress_1", ""),
+            personality.get("ai_frequency", ""),
+            # Valores y motivaciones (Pantalla 7b)
+            ai_motivation.get("performance_orientation_1", ""),
             ai_motivation.get("norm_internalization_1", ""),
             ai_motivation.get("norm_internalization_2", ""),
-            ai_motivation.get("reference_group_1", ""),
-            ai_motivation.get("reference_group_2", ""),
-            ai_motivation.get("peer_group_1", ""),
-            ai_motivation.get("peer_group_2", "")
+            ai_motivation.get("social_comparison_1", ""),
+            ai_motivation.get("learning_harm_1", ""),
+            # Contacto (opcional)
+            data.get("email", "")
         ]
 
         # Verificar coherencia entre headers y fila antes de escribir
@@ -725,7 +713,6 @@ def finalize():
 
     except Exception as e:
         print(f"⚠️ ERROR CRÍTICO inesperado en /finalize: {type(e).__name__}: {e}")
-        import traceback
         traceback.print_exc()
         return jsonify({"ok": False, "error": f"Error del servidor: {str(e)}"}), 500
 
@@ -868,7 +855,6 @@ def ai_suggest():
 
     except Exception as e:
         print(f"⚠️ ERROR inesperado en /ai-suggest: {type(e).__name__}: {e}")
-        import traceback
         traceback.print_exc()
         return jsonify({"ok": False, "error": "Error del servidor"}), 500
 
