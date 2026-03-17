@@ -343,6 +343,9 @@
     `,
     choices: ['Continuar'],
     on_load: () => {
+      // Resetear editLog para este trial (evita acumulación si la pantalla se recarga)
+      editLog = [];
+
       // deshabilita botón "Continuar" hasta llegar a 90
       const contBtn = document.querySelector('.jspsych-btn');
       contBtn.disabled = true;
