@@ -154,7 +154,7 @@ def get_or_create_worksheet(client, sheet_name, worksheet_name, headers):
             try:
                 first_row = worksheet.row_values(1)
                 if not first_row or first_row[:len(headers)] != headers:
-                    worksheet.update([headers], 'A1', value_input_option='RAW')
+                    worksheet.update('A1', [headers], value_input_option='RAW')
                     print(f"✅ Cabeceras actualizadas en '{worksheet_name}'")
             except Exception as e:
                 print(f"⚠️ No se pudieron actualizar cabeceras (no crítico): {e}")

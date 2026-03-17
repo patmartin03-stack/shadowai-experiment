@@ -178,7 +178,7 @@
     on_finish: () => {
       const target = document.getElementById('jspsych-target');
       if (target) {
-        const ok = store._finalize_ok !== false;
+        const ok = store._finalize_ok === true;
         target.innerHTML = `
           <div style="display:flex;justify-content:center;align-items:center;min-height:60vh;padding:24px;">
             <div class="center">
@@ -359,10 +359,25 @@
       const panel = document.getElementById('ai_suggestions');
       const help = document.getElementById('ai_help');
 
+      const MIN_WORDS = 60, MAX_WORDS = 120;
       const update = () => {
         const n = wordsOf(ta.value);
-        wc.textContent = `${n} ${n===1?'palabra':'palabras'}`;
-        contBtn.disabled = !(n>=55 && n<=130);
+        const inRange = n >= MIN_WORDS && n <= MAX_WORDS;
+        // Texto del contador con pista cuando está fuera de rango
+        if (n === 0) {
+          wc.textContent = `0 palabras`;
+          wc.style.color = 'var(--muted)';
+        } else if (n < MIN_WORDS) {
+          wc.textContent = `${n} palabras — mínimo ${MIN_WORDS}`;
+          wc.style.color = '#dc2626';
+        } else if (n > MAX_WORDS) {
+          wc.textContent = `${n} palabras — máximo ${MAX_WORDS}`;
+          wc.style.color = '#dc2626';
+        } else {
+          wc.textContent = `${n} palabras ✓`;
+          wc.style.color = 'var(--accent)';
+        }
+        contBtn.disabled = !inRange;
         editLog.push({ t: nowIso(), len: ta.value.length });
         // Guardar en store para que esté disponible en on_finish
         store.task_text = ta.value;
