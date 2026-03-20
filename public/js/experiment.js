@@ -244,7 +244,9 @@
       <p>
         El siguiente experimento forma parte de un Trabajo de Fin de Grado para la Universidad Pontificia Comillas.
         Toda la información será recolectada de forma anónima y su uso será únicamente académico y de investigación.
-        Por favor, mantente hasta el final. Gracias.
+      </p>
+      <p>
+        <strong>¡Muchas gracias por responder!</strong> Te llevará <strong>como máximo 5 minutos</strong> y es de gran ayuda para la investigación que te quedes hasta el final.
       </p>
       <p class="muted">
         Contacto: <a href="mailto:pmartinmartinez@alu.comillas.edu">pmartinmartinez@alu.comillas.edu</a>
@@ -740,14 +742,15 @@
     type: jsPsychSurveyHtmlForm,
     preamble: `<h2>Tu entorno y la IA</h2><p class="muted">Indica tu nivel de acuerdo con cada afirmación<br>(1 = Totalmente en desacuerdo &nbsp;·&nbsp; 5 = Totalmente de acuerdo).</p>`,
     html: `
-      ${makeLikert('peer_group_1',    'La mayoría de mis compañeros/as usan IA regularmente en sus tareas académicas.')}
-      ${makeLikert('peer_group_2',    'En mi entorno, usar IA para estudiar es algo habitual y aceptado.')}
-      ${makeLikert('tse_1',           'Me siento cómodo/a usando herramientas digitales cuando necesito ayuda.')}
-      ${makeLikert('detection_1',     'Creo que mi universidad puede detectar si uso IA de forma no autorizada.')}
-      ${makeLikert('norm_clarity_1',  'En mi universidad, las normas sobre uso de IA en trabajos están bien definidas y son claras.')}
-      ${makeLikert('academic_stress_1', 'Siento que la carga de mis asignaturas me exige más de lo que puedo dar.')}
+      ${makeLikert('subj_norm_desc_1',  'La mayoría de las personas de mi entorno usan IA regularmente en sus tareas o proyectos.')}
+      ${makeLikert('subj_norm_inj_1',   'Las personas importantes para mí desaprobarían que usara IA sin declararlo en un trabajo académico o profesional.')}
+      ${makeLikert('pbc_evasion_1',     'Si quisiera, podría usar IA en una tarea sin que nadie lo detectara.')}
+      ${makeLikert('pbc_capacity_1',    'Tengo los conocimientos necesarios para usar IA de forma eficaz en una tarea.')}
+      ${makeLikert('opp_perceived_1',   'Creo que es fácil detectar cuando alguien ha usado IA sin declararlo.')}
+      ${makeLikert('norm_clarity_1',    'Las normas sobre el uso de IA en trabajos académicos o profesionales están bien definidas y son claras.')}
+      ${makeLikert('pressure_1',        'Siento que las exigencias de mis tareas o responsabilidades actuales me superan con frecuencia.')}
       <div class="likert-group">
-        <p class="likert-question">¿Con qué frecuencia usas herramientas de IA en tus tareas académicas actualmente?</p>
+        <p class="likert-question">¿Con qué frecuencia usas herramientas de IA en tus tareas actualmente?</p>
         <select class="input" name="ai_frequency" required>
           <option value="">Selecciona…</option>
           <option value="1">Nunca</option>
@@ -770,11 +773,12 @@
     type: jsPsychSurveyHtmlForm,
     preamble: `<h2>Sobre tus valores y motivaciones</h2><p class="muted">Indica tu nivel de acuerdo con cada afirmación<br>(1 = Totalmente en desacuerdo &nbsp;·&nbsp; 5 = Totalmente de acuerdo).</p>`,
     html: `
-      ${makeLikert('performance_orientation_1', 'Cuando hago un trabajo académico, me importa más sacar buena nota que aprender en profundidad.')}
-      ${makeLikert('norm_internalization_1',     'Respetaría las normas sobre uso de IA aunque nadie pudiera comprobarlo.')}
-      ${makeLikert('norm_internalization_2',     'Si la IA mejora mi trabajo, usarla está justificado aunque esté prohibido.')}
-      ${makeLikert('social_comparison_1',        'Si mis compañeros usan IA sin consecuencias, no veo por qué yo no debería.')}
-      ${makeLikert('learning_harm_1',            'Usar IA para hacer un trabajo reduce lo que aprendo con esa tarea.')}
+      ${makeLikert('motiv_orient_1',     'En general, me importa más obtener un buen resultado que el proceso de llegar a él.')}
+      ${makeLikert('moral_intern_1',     'Respetaría las normas sobre uso de IA aunque nadie pudiera comprobarlo.')}
+      ${makeLikert('moral_guilt_1',      'Me sentiría culpable si usara IA en una tarea sin declararlo.')}
+      ${makeLikert('moral_principles_1', 'Usar IA sin declararlo iría en contra de mis principios.')}
+      ${makeLikert('rationaliz_util_1',  'Si la IA mejora el resultado de un trabajo, usarla está justificado aunque no esté permitido.')}
+      ${makeLikert('rationaliz_norm_1',  'Si otros usan IA sin consecuencias, no veo por qué yo no debería.')}
     `,
     button_label: 'Continuar',
     on_finish: async (data) => {
