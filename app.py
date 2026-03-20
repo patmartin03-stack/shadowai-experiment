@@ -606,13 +606,13 @@ def finalize():
             # Control
             "noticed_policy", "used_ai_button", "used_external_ai",
             # Tu entorno y la IA (Pantalla 7 — coincide con name= del form)
-            "peer_group_1", "peer_group_2",
-            "tse_1", "detection_1", "norm_clarity_1",
-            "academic_stress_1", "ai_frequency",
+            "subj_norm_desc_1", "subj_norm_inj_1",
+            "pbc_evasion_1", "pbc_capacity_1", "opp_perceived_1",
+            "norm_clarity_1", "pressure_1", "ai_frequency",
             # Valores y motivaciones (Pantalla 7b — coincide con name= del form)
-            "performance_orientation_1",
-            "norm_internalization_1", "norm_internalization_2",
-            "social_comparison_1", "learning_harm_1",
+            "motiv_orient_1",
+            "moral_intern_1", "moral_guilt_1", "moral_principles_1",
+            "rationaliz_util_1", "rationaliz_norm_1",
             # Contacto (opcional)
             "email"
         ]
@@ -658,19 +658,21 @@ def finalize():
             control.get("used_ai_button", ""),
             control.get("used_external_ai", ""),
             # Tu entorno y la IA (Pantalla 7)
-            personality.get("peer_group_1", ""),
-            personality.get("peer_group_2", ""),
-            personality.get("tse_1", ""),
-            personality.get("detection_1", ""),
+            personality.get("subj_norm_desc_1", ""),
+            personality.get("subj_norm_inj_1", ""),
+            personality.get("pbc_evasion_1", ""),
+            personality.get("pbc_capacity_1", ""),
+            personality.get("opp_perceived_1", ""),
             personality.get("norm_clarity_1", ""),
-            personality.get("academic_stress_1", ""),
+            personality.get("pressure_1", ""),
             personality.get("ai_frequency", ""),
             # Valores y motivaciones (Pantalla 7b)
-            ai_motivation.get("performance_orientation_1", ""),
-            ai_motivation.get("norm_internalization_1", ""),
-            ai_motivation.get("norm_internalization_2", ""),
-            ai_motivation.get("social_comparison_1", ""),
-            ai_motivation.get("learning_harm_1", ""),
+            ai_motivation.get("motiv_orient_1", ""),
+            ai_motivation.get("moral_intern_1", ""),
+            ai_motivation.get("moral_guilt_1", ""),
+            ai_motivation.get("moral_principles_1", ""),
+            ai_motivation.get("rationaliz_util_1", ""),
+            ai_motivation.get("rationaliz_norm_1", ""),
             # Contacto (opcional)
             data.get("email", "")
         ]
