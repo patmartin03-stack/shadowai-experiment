@@ -51,6 +51,45 @@ textarea{ resize:vertical; }
   cursor:pointer;
 }
 
+/* Botón de IA llamativo */
+#ai_help{
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #a855f7 100%);
+  color: #fff;
+  border: none;
+  font-weight: 600;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  box-shadow: 0 2px 12px rgba(124, 58, 237, 0.35);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  position: relative;
+  overflow: hidden;
+}
+#ai_help::before{
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 60%);
+  pointer-events: none;
+}
+#ai_help:hover:not(:disabled){
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(124, 58, 237, 0.5);
+}
+#ai_help:active:not(:disabled){
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.3);
+}
+#ai_help:disabled{
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+@keyframes ai-pulse{
+  0%, 100%{ box-shadow: 0 2px 12px rgba(124, 58, 237, 0.35); }
+  50%{ box-shadow: 0 2px 18px rgba(124, 58, 237, 0.6); }
+}
+#ai_help:not(:disabled){
+  animation: ai-pulse 2.5s ease-in-out infinite;
+}
+
 .checkbox{ display:flex; align-items:center; gap:8px; margin:12px 0; }
 .row-3{ display:grid; grid-template-columns:1fr 1fr 2fr; gap:10px; }
 
