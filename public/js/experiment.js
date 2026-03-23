@@ -337,7 +337,7 @@
         <p>Redacta un texto entre <strong>60 y 120 palabras</strong>.</p>
         <textarea class="input" id="task_text" rows="10" placeholder="Escribe aquí…"></textarea>
         <div class="task-tools">
-          ${assignedPolicy.showAIButton ? '<button id="ai_help" class="btn-outline" type="button" title="Selecciona texto para reescribirlo, o pulsa sin seleccionar para obtener una frase que puedas insertar directamente.">Ayuda de IA</button>' : '<span></span>'}
+          ${assignedPolicy.showAIButton ? '<button id="ai_help" class="btn-outline" type="button" title="Selecciona texto para reescribirlo, o pulsa sin seleccionar para obtener una frase que puedas insertar directamente.">✨ Ayuda de IA</button>' : '<span></span>'}
           <span id="word_count" class="muted">0 palabras</span>
         </div>
         <div id="ai_suggestions" class="suggestions hidden"></div>
@@ -532,7 +532,7 @@
             console.error('Error al obtener sugerencia de IA:', error);
           } finally {
             help.disabled = false;
-            help.textContent = 'Ayuda de IA';
+            help.textContent = '✨ Ayuda de IA';
           }
         });
       }
