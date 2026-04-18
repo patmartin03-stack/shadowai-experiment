@@ -15,19 +15,19 @@
     {
       key:'permisiva',
       label:'Permisiva',
-      description: 'Para la realización de este trabajo puedes utilizar libremente el asistente de IA integrado en la plataforma, así como cualquier otra herramienta de IA externa. No es necesario que declares su uso en la entrega.',
+      description: 'Para esta tarea, el uso de herramientas de inteligencia artificial generativa <strong>está permitido</strong>. Puedes apoyarte en ellas libremente durante todo el proceso.',
       showAIButton: true
     },
     {
       key:'difusa',
-      label:'Difusa',
-      description: 'Para la realización de este trabajo tienes disponible el asistente de IA integrado en la plataforma. Valora tú mismo/a en qué medida su uso es apropiado para cada parte de la tarea, teniendo en cuenta que el trabajo debe reflejar tu propio aprendizaje.',
+      label:'Ambigua',
+      description: 'Para esta tarea, el uso de herramientas de inteligencia artificial generativa <strong>queda a tu criterio</strong> personal. Tú decides si apoyarte en ellas.',
       showAIButton: true
     },
     {
       key:'restrictiva',
       label:'Restrictiva',
-      description: 'Para la realización de este trabajo tienes disponible el asistente de IA integrado en la plataforma, aunque su uso no está permitido en esta tarea. El uso del asistente u otras herramientas de IA externas se considerará una infracción de integridad académica y podrá conllevar la anulación de la calificación.',
+      description: 'Para esta tarea, el uso de herramientas de inteligencia artificial generativa <strong>no está permitido</strong>. El texto debe ser redactado íntegramente por ti.',
       showAIButton: true
     }
   ];
@@ -322,7 +322,8 @@
         </div>
       </div>
     `,
-    choices: ['Continuar']
+    choices: ['Continuar'],
+    enable_button_after: 3000
   };
 
   // ====== PANTALLA 4 — Tarea 60–120 palabras + Ayuda IA con OpenAI ======
@@ -590,16 +591,42 @@
 
   // ====== PANTALLA 5 — Control ======
   const s5 = {
-    type: jsPsychSurveyMultiChoice,
+    type: jsPsychSurveyHtmlForm,
     preamble: `<h2>Alguna pregunta sobre la tarea</h2>`,
-    questions: [
-      { prompt: '¿Te diste cuenta de que había una indicación sobre el uso de IA?',
-        options: ['Sí','No'], required:true, name:'noticed_policy' },
-      { prompt: '¿Usaste el botón de ayuda de IA?',
-        options: ['Sí','No'], required:true, name:'used_ai_button' },
-      { prompt: '¿Usaste alguna IA externa al experimento?',
-        options: ['Sí','No'], required:true, name:'used_external_ai' }
-    ],
+    html: `
+      <div class="likert-group">
+        <p class="likert-question">¿Cómo de restrictiva consideras que era la política de Inteligencia Artificial para la tarea que acabas de realizar?</p>
+        <div class="likert-scale">
+          <span class="likert-anchor">Nada<br>restrictiva</span>
+          <label class="likert-option"><input type="radio" name="policy_restrictiveness" value="1" required><span>1</span></label>
+          <label class="likert-option"><input type="radio" name="policy_restrictiveness" value="2"><span>2</span></label>
+          <label class="likert-option"><input type="radio" name="policy_restrictiveness" value="3"><span>3</span></label>
+          <label class="likert-option"><input type="radio" name="policy_restrictiveness" value="4"><span>4</span></label>
+          <label class="likert-option"><input type="radio" name="policy_restrictiveness" value="5"><span>5</span></label>
+          <label class="likert-option"><input type="radio" name="policy_restrictiveness" value="6"><span>6</span></label>
+          <label class="likert-option"><input type="radio" name="policy_restrictiveness" value="7"><span>7</span></label>
+          <span class="likert-anchor">Muy<br>restrictiva</span>
+        </div>
+      </div>
+      <div class="likert-group">
+        <p class="likert-question">¿Usaste el botón de ayuda de IA?</p>
+        <label style="display:inline-flex;align-items:center;gap:6px;margin-right:16px;cursor:pointer;">
+          <input type="radio" name="used_ai_button" value="Sí" required> Sí
+        </label>
+        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+          <input type="radio" name="used_ai_button" value="No"> No
+        </label>
+      </div>
+      <div class="likert-group">
+        <p class="likert-question">¿Usaste alguna IA externa al experimento?</p>
+        <label style="display:inline-flex;align-items:center;gap:6px;margin-right:16px;cursor:pointer;">
+          <input type="radio" name="used_external_ai" value="Sí" required> Sí
+        </label>
+        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+          <input type="radio" name="used_external_ai" value="No"> No
+        </label>
+      </div>
+    `,
     button_label: 'Continuar',
     on_finish: async (data) => {
       store.control = data.response;

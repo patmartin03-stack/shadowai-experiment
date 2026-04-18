@@ -604,7 +604,7 @@ def finalize():
             # Declaración de uso de IA (autoreportado)
             "ai_generated_pct", "ai_paraphrased_pct",
             # Control
-            "noticed_policy", "used_ai_button", "used_external_ai",
+            "policy_restrictiveness", "used_ai_button", "used_external_ai",
             # Tu entorno y la IA (Pantalla 7 — coincide con name= del form)
             "subj_norm_desc_1", "subj_norm_inj_1",
             "pbc_evasion_1", "pbc_capacity_1", "opp_perceived_1",
@@ -654,7 +654,7 @@ def finalize():
             ai_usage.get("generated_pct", 0),
             ai_usage.get("paraphrased_pct", 0),
             # Control
-            control.get("noticed_policy", ""),
+            control.get("policy_restrictiveness", ""),
             control.get("used_ai_button", ""),
             control.get("used_external_ai", ""),
             # Tu entorno y la IA (Pantalla 7)
