@@ -287,7 +287,6 @@
         <option>Grado</option>
         <option>Máster</option>
         <option>Doctorado</option>
-        <option>Ya graduado/a (Grado o Máster)</option>
       </select>
 
       <label class="label">Año de graduación de los últimos estudios superiores (en curso o finalizados)</label>
