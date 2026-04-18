@@ -304,7 +304,7 @@
   };
 
   // ====== PANTALLA 3 — Introducción + política IA visible ======
-  const taskPrompt = 'Escribe sobre cómo tus estudios actuales te ayudarán en tu futuro profesional y/o personal. Puedes enfocarte en las competencias adquiridas, tus objetivos, o cualquier aspecto que consideres relevante.';
+  const taskPrompt = 'Escribe sobre cómo tus estudios te han ayudado o te ayudarán en tu futuro profesional y/o personal. Puedes enfocarte en las competencias adquiridas, tus objetivos, o cualquier aspecto que consideres relevante.';
 
   const s3 = {
     type: jsPsychHtmlButtonResponse,
@@ -639,7 +639,7 @@
     preamble: `<h2>Sobre tus estudios</h2>`,
     html: `
       <label class="label">Universidad en la que has estudiado</label>
-      <select class="input" name="uni" required>
+      <select class="input" name="uni" required onchange="(function(v){var g=document.getElementById('uni_other_grp');var i=document.getElementById('uni_other_inp');if(v==='Otra'){g.style.display='block';i.required=true;}else{g.style.display='none';i.required=false;i.value='';}})(this.value)">
         <option value="">Selecciona…</option>
         <optgroup label="Madrid">
           <option>Universidad Complutense de Madrid (UCM)</option>
@@ -657,39 +657,56 @@
           <option>Universidad Camilo José Cela</option>
           <option>Centro Universitario Villanueva</option>
           <option>IE Universidad (Madrid)</option>
+          <option>CUNEF Universidad</option>
+          <option>Universidad Alfonso X el Sabio (UAX)</option>
+          <option>Universidad a Distancia de Madrid (UDIMA)</option>
+          <option>Universidad Isabel I</option>
         </optgroup>
-        <optgroup label="Barcelona">
+        <optgroup label="Cataluña">
           <option>Universidad de Barcelona (UB)</option>
           <option>Universidad Autónoma de Barcelona (UAB)</option>
           <option>Universidad Politécnica de Cataluña (UPC)</option>
           <option>Universidad Pompeu Fabra (UPF)</option>
-          <option>Universidad Ramon Llull</option>
-          <option>Universidad de Vic</option>
+          <option>Universidad Ramon Llull (URL)</option>
+          <option>Universidad de Vic – Universidad Central de Cataluña (UVic-UCC)</option>
           <option>Universitat Oberta de Catalunya (UOC)</option>
+          <option>Universitat de Lleida (UdL)</option>
+          <option>Universitat de Girona (UdG)</option>
+          <option>Universitat Rovira i Virgili (URV)</option>
+          <option>Universitat Internacional de Catalunya (UIC)</option>
+          <option>TecnoCampus (UPF)</option>
         </optgroup>
-        <optgroup label="Valencia">
+        <optgroup label="Valencia y Murcia">
           <option>Universidad de Valencia (UV)</option>
           <option>Universidad Politécnica de Valencia (UPV)</option>
-          <option>Universidad Miguel Hernández de Elche</option>
-          <option>Universidad Jaume I de Castellón</option>
-          <option>Universidad Cardenal Herrera CEU</option>
+          <option>Universidad Miguel Hernández de Elche (UMH)</option>
+          <option>Universidad Jaume I de Castellón (UJI)</option>
+          <option>Universidad Cardenal Herrera CEU (UCH-CEU)</option>
+          <option>Universidad Internacional de Valencia (VIU)</option>
+          <option>Universidad Católica de Valencia (UCV)</option>
+          <option>Universidad de Alicante (UA)</option>
+          <option>Universidad de Murcia (UM)</option>
+          <option>Universidad Católica de Murcia (UCAM)</option>
+          <option>Universidad Politécnica de Cartagena (UPCT)</option>
         </optgroup>
         <optgroup label="Andalucía">
           <option>Universidad de Sevilla (US)</option>
           <option>Universidad de Granada (UGR)</option>
           <option>Universidad de Málaga (UMA)</option>
           <option>Universidad de Córdoba (UCO)</option>
-          <option>Universidad Pablo de Olavide</option>
+          <option>Universidad Pablo de Olavide (UPO)</option>
           <option>Universidad de Cádiz (UCA)</option>
           <option>Universidad de Almería (UAL)</option>
           <option>Universidad de Huelva (UHU)</option>
           <option>Universidad de Jaén (UJA)</option>
+          <option>Universidad Loyola Andalucía</option>
+          <option>Universidad Internacional de Andalucía (UNIA)</option>
         </optgroup>
         <optgroup label="País Vasco y Navarra">
           <option>Universidad del País Vasco (UPV/EHU)</option>
           <option>Universidad de Deusto</option>
-          <option>Universidad de Navarra</option>
-          <option>Universidad Pública de Navarra</option>
+          <option>Universidad de Navarra (UNAV)</option>
+          <option>Universidad Pública de Navarra (UPNA)</option>
           <option>Mondragon Unibertsitatea</option>
         </optgroup>
         <optgroup label="Castilla y León">
@@ -697,42 +714,125 @@
           <option>Universidad de Valladolid (UVA)</option>
           <option>Universidad de León (ULE)</option>
           <option>Universidad de Burgos (UBU)</option>
-          <option>Universidad Pontificia de Salamanca</option>
+          <option>Universidad Pontificia de Salamanca (UPSA)</option>
+          <option>Universidad Europea Miguel de Cervantes (UEMC)</option>
         </optgroup>
         <optgroup label="Galicia">
           <option>Universidad de Santiago de Compostela (USC)</option>
-          <option>Universidad de Vigo</option>
+          <option>Universidad de Vigo (UVigo)</option>
           <option>Universidad de A Coruña (UDC)</option>
         </optgroup>
-        <optgroup label="Resto de España">
-          <option>Universidad de Murcia (UM)</option>
+        <optgroup label="Aragón">
           <option>Universidad de Zaragoza (UNIZAR)</option>
-          <option>Universidad de Alicante (UA)</option>
+          <option>Universidad San Jorge (USJ)</option>
+        </optgroup>
+        <optgroup label="Asturias y Cantabria">
           <option>Universidad de Oviedo (UNIOVI)</option>
           <option>Universidad de Cantabria (UC)</option>
-          <option>Universidad de Extremadura (UEX)</option>
-          <option>Universidad de La Rioja (UR)</option>
+        </optgroup>
+        <optgroup label="Castilla-La Mancha y Extremadura">
           <option>Universidad de Castilla-La Mancha (UCLM)</option>
+          <option>Universidad de Extremadura (UEX)</option>
+        </optgroup>
+        <optgroup label="La Rioja">
+          <option>Universidad de La Rioja (UR)</option>
+          <option>Universidad Internacional de La Rioja (UNIR)</option>
+        </optgroup>
+        <optgroup label="Islas Baleares">
           <option>Universidad de las Islas Baleares (UIB)</option>
+        </optgroup>
+        <optgroup label="Canarias">
           <option>Universidad de La Laguna (ULL)</option>
           <option>Universidad de Las Palmas de Gran Canaria (ULPGC)</option>
         </optgroup>
-        <optgroup label="Otras">
-          <option>Universidad Internacional</option>
-          <option>Universidad Privada</option>
-          <option>Universidad Extranjera</option>
-          <option>Otra</option>
+        <optgroup label="Ceuta y Melilla">
+          <option>UNED (centros en Ceuta y Melilla)</option>
         </optgroup>
+        <option value="Otra">Otra</option>
       </select>
+      <div id="uni_other_grp" style="display:none;margin-top:8px;">
+        <label class="label">Indica el nombre de tu universidad</label>
+        <input id="uni_other_inp" class="input" type="text" name="uni_other" placeholder="Nombre de la universidad…" />
+      </div>
 
       <label class="label">Rama de conocimiento de los últimos estudios</label>
       <select class="input" name="field" required>
         <option value="">Selecciona…</option>
-        <option>Ciencias Sociales y Jurídicas</option>
-        <option>Ingeniería y Arquitectura</option>
-        <option>Artes y Humanidades</option>
-        <option>Ciencias</option>
-        <option>Ciencias de la Salud</option>
+        <optgroup label="Ciencias Sociales y Jurídicas">
+          <option>Administración y Dirección de Empresas (ADE)</option>
+          <option>Economía</option>
+          <option>Derecho</option>
+          <option>Relaciones Internacionales</option>
+          <option>Ciencias Políticas y de la Administración</option>
+          <option>Sociología</option>
+          <option>Trabajo Social y Servicios Sociales</option>
+          <option>Psicología</option>
+          <option>Educación y Pedagogía</option>
+          <option>Comunicación, Periodismo y Publicidad</option>
+          <option>Marketing y Publicidad</option>
+          <option>Turismo, Hostelería y Ocio</option>
+          <option>Recursos Humanos y Relaciones Laborales</option>
+          <option>Criminología y Seguridad</option>
+          <option>Contabilidad y Finanzas</option>
+          <option>Comercio Internacional</option>
+        </optgroup>
+        <optgroup label="Ingeniería y Arquitectura">
+          <option>Ingeniería Informática y Tecnologías de la Información</option>
+          <option>Ingeniería de Telecomunicaciones</option>
+          <option>Inteligencia Artificial y Ciencia de Datos</option>
+          <option>Ingeniería Industrial</option>
+          <option>Ingeniería Mecánica</option>
+          <option>Ingeniería Eléctrica y Electrónica</option>
+          <option>Ingeniería Civil y Obras Públicas</option>
+          <option>Ingeniería Química</option>
+          <option>Ingeniería Aeronáutica y Aeroespacial</option>
+          <option>Ingeniería de Minas y Energía</option>
+          <option>Ingeniería Agronómica, Forestal y del Medio Natural</option>
+          <option>Ingeniería Biomédica</option>
+          <option>Ingeniería de Materiales</option>
+          <option>Arquitectura y Urbanismo</option>
+          <option>Arquitectura Técnica / Edificación</option>
+        </optgroup>
+        <optgroup label="Artes y Humanidades">
+          <option>Historia</option>
+          <option>Historia del Arte</option>
+          <option>Geografía</option>
+          <option>Filosofía</option>
+          <option>Filología y Lingüística</option>
+          <option>Traducción e Interpretación</option>
+          <option>Bellas Artes</option>
+          <option>Diseño (Gráfico, Industrial, Moda…)</option>
+          <option>Música, Danza y Artes Escénicas</option>
+          <option>Arqueología y Patrimonio</option>
+          <option>Estudios Clásicos</option>
+        </optgroup>
+        <optgroup label="Ciencias">
+          <option>Matemáticas</option>
+          <option>Estadística</option>
+          <option>Física</option>
+          <option>Química</option>
+          <option>Biología</option>
+          <option>Biotecnología</option>
+          <option>Bioquímica y Biología Molecular</option>
+          <option>Geología y Ciencias de la Tierra</option>
+          <option>Ciencias Ambientales</option>
+          <option>Ciencias del Mar y Oceanografía</option>
+          <option>Óptica</option>
+        </optgroup>
+        <optgroup label="Ciencias de la Salud">
+          <option>Medicina</option>
+          <option>Enfermería</option>
+          <option>Farmacia</option>
+          <option>Fisioterapia</option>
+          <option>Terapia Ocupacional</option>
+          <option>Odontología</option>
+          <option>Nutrición y Dietética</option>
+          <option>Óptica y Optometría</option>
+          <option>Veterinaria</option>
+          <option>Podología</option>
+          <option>Logopedia</option>
+          <option>Psicología Clínica (Máster)</option>
+        </optgroup>
         <option>Otra</option>
       </select>
 
