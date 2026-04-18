@@ -287,7 +287,6 @@
         <option>Grado</option>
         <option>Máster</option>
         <option>Doctorado</option>
-        <option>Ya graduado/a (Grado o Máster)</option>
       </select>
 
       <label class="label">Año de graduación de los últimos estudios superiores (en curso o finalizados)</label>
@@ -316,7 +315,7 @@
           ${taskPrompt}
         </p>
         <p class="muted" style="font-size:0.9em;">Redacta un texto de entre <strong>60 y 120 palabras</strong>.</p>
-        <div class="policy" style="opacity:0.65;">
+        <div class="policy">
           <span style="font-size:0.85em; font-weight:600; color:var(--muted);">Política de uso de IA</span>
           <p>${assignedPolicy.description}</p>
         </div>
