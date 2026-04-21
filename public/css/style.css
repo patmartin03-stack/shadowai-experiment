@@ -104,7 +104,7 @@ textarea{ resize:vertical; }
   margin-top:20px; padding:16px; border-radius:10px;
   background:rgba(79, 70, 229, 0.08); border:1px solid rgba(79, 70, 229, 0.2);
 }
-.policy strong{ color:var(--accent); }
+.policy strong{ color:#ec4899; }
 .policy p{ margin:8px 0 0 0; line-height:1.6; }
 
 .card-plain{ padding:8px 0; }
