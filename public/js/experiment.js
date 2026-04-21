@@ -246,7 +246,7 @@
         Toda la información será recolectada de forma anónima y su uso será únicamente académico y de investigación.
       </p>
       <p>
-        <strong>¡Muchas gracias por responder!</strong> Te llevará <strong>como máximo 5 minutos</strong> y es de gran ayuda para la investigación que te quedes hasta el final.
+        <strong>¡Muchas gracias por responder!</strong> Te llevará <strong>como máximo 10 minutos</strong> (aunque normalmente alrededor de 5 minutos) y es de gran ayuda para la investigación que te quedes hasta el final. <strong>Por favor, lee todo atentamente antes de continuar.</strong>
       </p>
       <p class="muted">
         Contacto: <a href="mailto:pmartinmartinez@alu.comillas.edu">pmartinmartinez@alu.comillas.edu</a>
@@ -608,12 +608,21 @@
         </div>
       </div>
       <div class="likert-group">
-        <p class="likert-question">¿Usaste el botón de ayuda de IA?</p>
+        <p class="likert-question">¿Clickaste el botón de ayuda de IA?</p>
         <label style="display:inline-flex;align-items:center;gap:6px;margin-right:16px;cursor:pointer;">
-          <input type="radio" name="used_ai_button" value="Sí" required> Sí
+          <input type="radio" name="used_ai_button" value="Sí" required onchange="document.getElementById('s5-insert-q').style.display='block'"> Sí
         </label>
         <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
-          <input type="radio" name="used_ai_button" value="No"> No
+          <input type="radio" name="used_ai_button" value="No" onchange="document.getElementById('s5-insert-q').style.display='none'"> No
+        </label>
+      </div>
+      <div class="likert-group" id="s5-insert-q" style="display:none">
+        <p class="likert-question">¿Insertaste la sugerencia en el texto?</p>
+        <label style="display:inline-flex;align-items:center;gap:6px;margin-right:16px;cursor:pointer;">
+          <input type="radio" name="inserted_ai_suggestion" value="Sí"> Sí
+        </label>
+        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+          <input type="radio" name="inserted_ai_suggestion" value="No"> No
         </label>
       </div>
       <div class="likert-group">
