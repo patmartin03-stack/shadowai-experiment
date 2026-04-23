@@ -565,6 +565,8 @@
   };
 
   // ====== PANTALLA 4B — Declaración de uso de IA ======
+  let goBackToDeclaration = false;
+
   const s4b = {
     type: jsPsychSurveyHtmlForm,
     preamble: `
@@ -636,11 +638,32 @@
           <input type="radio" name="used_external_ai" value="No"> No
         </label>
       </div>
+      <div style="margin-top:24px;">
+        <button type="button" id="s5_back_btn" style="background:none;border:1px solid #9ca3af;color:#6b7280;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.875em;">← Volver a la declaración de IA</button>
+      </div>
     `,
     button_label: 'Continuar',
+    on_load: () => {
+      document.getElementById('s5_back_btn').addEventListener('click', () => {
+        goBackToDeclaration = true;
+        jsPsych.finishTrial({});
+      });
+    },
     on_finish: async (data) => {
+      if (goBackToDeclaration) return;
       store.control = data.response;
       await sendLog('control_answers', store.control);
+    }
+  };
+
+  const declarationBlock = {
+    timeline: [s4b, s5],
+    loop_function: () => {
+      if (goBackToDeclaration) {
+        goBackToDeclaration = false;
+        return true;
+      }
+      return false;
     }
   };
 
@@ -1077,7 +1100,7 @@
   // ====== Timeline completo ======
   // sEmail recoge contacto opcional; finalizeCall envía todo a /finalize;
   // el mensaje de agradecimiento se muestra en el on_finish de jsPsych.
-  const timeline = [s1, s2, s3, s4, s4b, s5, s6, s7, s7b, preFinalizeCall, sEmail, finalizeCall];
+  const timeline = [s1, s2, s3, s4, declarationBlock, s6, s7, s7b, preFinalizeCall, sEmail, finalizeCall];
 
   // ¡Comenzar!
   jsPsych.run(timeline);
