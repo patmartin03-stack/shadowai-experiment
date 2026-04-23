@@ -284,6 +284,8 @@
       <label class="label">Últimos estudios superiores cursados (terminados o en progreso)</label>
       <select class="input" name="studies" id="studies" required>
         <option value="">Selecciona…</option>
+        <option>Bachillerato</option>
+        <option>Formación Profesional Superior</option>
         <option>Grado</option>
         <option>Máster</option>
         <option>Doctorado</option>
