@@ -281,9 +281,11 @@
         <option>Mujer</option>
       </select>
 
-      <label class="label">Últimos estudios superiores cursados</label>
+      <label class="label">Últimos estudios superiores cursados (terminados o en progreso)</label>
       <select class="input" name="studies" id="studies" required>
         <option value="">Selecciona…</option>
+        <option>Bachillerato</option>
+        <option>Formación Profesional Superior</option>
         <option>Grado</option>
         <option>Máster</option>
         <option>Doctorado</option>
@@ -651,93 +653,93 @@
       <select class="input" name="uni" required onchange="(function(v){var g=document.getElementById('uni_other_grp');var i=document.getElementById('uni_other_inp');if(v==='Otra'){g.style.display='block';i.required=true;}else{g.style.display='none';i.required=false;i.value='';}})(this.value)">
         <option value="">Selecciona…</option>
         <optgroup label="Madrid">
-          <option>Universidad Complutense de Madrid (UCM)</option>
+          <option>Centro Universitario Villanueva</option>
+          <option>CUNEF Universidad</option>
+          <option>IE Universidad (Madrid)</option>
+          <option>Universidad a Distancia de Madrid (UDIMA)</option>
+          <option>Universidad Alfonso X el Sabio (UAX)</option>
+          <option>Universidad Antonio de Nebrija</option>
           <option>Universidad Autónoma de Madrid (UAM)</option>
+          <option>Universidad Camilo José Cela</option>
           <option>Universidad Carlos III de Madrid (UC3M)</option>
+          <option>Universidad Complutense de Madrid (UCM)</option>
+          <option>Universidad de Alcalá (UAH)</option>
+          <option>Universidad Europea de Madrid</option>
+          <option>Universidad Francisco de Vitoria</option>
+          <option>Universidad Isabel I</option>
+          <option>Universidad Nacional de Educación a Distancia (UNED)</option>
           <option>Universidad Politécnica de Madrid (UPM)</option>
           <option>Universidad Pontificia Comillas (ICAI-ICADE)</option>
           <option>Universidad Rey Juan Carlos (URJC)</option>
-          <option>Universidad de Alcalá (UAH)</option>
-          <option>Universidad Nacional de Educación a Distancia (UNED)</option>
           <option>Universidad San Pablo CEU</option>
-          <option>Universidad Francisco de Vitoria</option>
-          <option>Universidad Antonio de Nebrija</option>
-          <option>Universidad Europea de Madrid</option>
-          <option>Universidad Camilo José Cela</option>
-          <option>Centro Universitario Villanueva</option>
-          <option>IE Universidad (Madrid)</option>
-          <option>CUNEF Universidad</option>
-          <option>Universidad Alfonso X el Sabio (UAX)</option>
-          <option>Universidad a Distancia de Madrid (UDIMA)</option>
-          <option>Universidad Isabel I</option>
         </optgroup>
         <optgroup label="Cataluña">
-          <option>Universidad de Barcelona (UB)</option>
+          <option>TecnoCampus (UPF)</option>
           <option>Universidad Autónoma de Barcelona (UAB)</option>
+          <option>Universidad de Barcelona (UB)</option>
+          <option>Universidad de Vic – Universidad Central de Cataluña (UVic-UCC)</option>
           <option>Universidad Politécnica de Cataluña (UPC)</option>
           <option>Universidad Pompeu Fabra (UPF)</option>
           <option>Universidad Ramon Llull (URL)</option>
-          <option>Universidad de Vic – Universidad Central de Cataluña (UVic-UCC)</option>
-          <option>Universitat Oberta de Catalunya (UOC)</option>
-          <option>Universitat de Lleida (UdL)</option>
           <option>Universitat de Girona (UdG)</option>
-          <option>Universitat Rovira i Virgili (URV)</option>
+          <option>Universitat de Lleida (UdL)</option>
           <option>Universitat Internacional de Catalunya (UIC)</option>
-          <option>TecnoCampus (UPF)</option>
+          <option>Universitat Oberta de Catalunya (UOC)</option>
+          <option>Universitat Rovira i Virgili (URV)</option>
         </optgroup>
         <optgroup label="Valencia y Murcia">
-          <option>Universidad de Valencia (UV)</option>
-          <option>Universidad Politécnica de Valencia (UPV)</option>
-          <option>Universidad Miguel Hernández de Elche (UMH)</option>
-          <option>Universidad Jaume I de Castellón (UJI)</option>
           <option>Universidad Cardenal Herrera CEU (UCH-CEU)</option>
-          <option>Universidad Internacional de Valencia (VIU)</option>
+          <option>Universidad Católica de Murcia (UCAM)</option>
           <option>Universidad Católica de Valencia (UCV)</option>
           <option>Universidad de Alicante (UA)</option>
           <option>Universidad de Murcia (UM)</option>
-          <option>Universidad Católica de Murcia (UCAM)</option>
+          <option>Universidad de Valencia (UV)</option>
+          <option>Universidad Internacional de Valencia (VIU)</option>
+          <option>Universidad Jaume I de Castellón (UJI)</option>
+          <option>Universidad Miguel Hernández de Elche (UMH)</option>
           <option>Universidad Politécnica de Cartagena (UPCT)</option>
+          <option>Universidad Politécnica de Valencia (UPV)</option>
         </optgroup>
         <optgroup label="Andalucía">
-          <option>Universidad de Sevilla (US)</option>
-          <option>Universidad de Granada (UGR)</option>
-          <option>Universidad de Málaga (UMA)</option>
-          <option>Universidad de Córdoba (UCO)</option>
-          <option>Universidad Pablo de Olavide (UPO)</option>
-          <option>Universidad de Cádiz (UCA)</option>
           <option>Universidad de Almería (UAL)</option>
+          <option>Universidad de Cádiz (UCA)</option>
+          <option>Universidad de Córdoba (UCO)</option>
+          <option>Universidad de Granada (UGR)</option>
           <option>Universidad de Huelva (UHU)</option>
           <option>Universidad de Jaén (UJA)</option>
-          <option>Universidad Loyola Andalucía</option>
+          <option>Universidad de Málaga (UMA)</option>
+          <option>Universidad de Sevilla (US)</option>
           <option>Universidad Internacional de Andalucía (UNIA)</option>
+          <option>Universidad Loyola Andalucía</option>
+          <option>Universidad Pablo de Olavide (UPO)</option>
         </optgroup>
         <optgroup label="País Vasco y Navarra">
-          <option>Universidad del País Vasco (UPV/EHU)</option>
+          <option>Mondragon Unibertsitatea</option>
           <option>Universidad de Deusto</option>
           <option>Universidad de Navarra (UNAV)</option>
+          <option>Universidad del País Vasco (UPV/EHU)</option>
           <option>Universidad Pública de Navarra (UPNA)</option>
-          <option>Mondragon Unibertsitatea</option>
         </optgroup>
         <optgroup label="Castilla y León">
+          <option>Universidad de Burgos (UBU)</option>
+          <option>Universidad de León (ULE)</option>
           <option>Universidad de Salamanca (USAL)</option>
           <option>Universidad de Valladolid (UVA)</option>
-          <option>Universidad de León (ULE)</option>
-          <option>Universidad de Burgos (UBU)</option>
-          <option>Universidad Pontificia de Salamanca (UPSA)</option>
           <option>Universidad Europea Miguel de Cervantes (UEMC)</option>
+          <option>Universidad Pontificia de Salamanca (UPSA)</option>
         </optgroup>
         <optgroup label="Galicia">
+          <option>Universidad de A Coruña (UDC)</option>
           <option>Universidad de Santiago de Compostela (USC)</option>
           <option>Universidad de Vigo (UVigo)</option>
-          <option>Universidad de A Coruña (UDC)</option>
         </optgroup>
         <optgroup label="Aragón">
           <option>Universidad de Zaragoza (UNIZAR)</option>
           <option>Universidad San Jorge (USJ)</option>
         </optgroup>
         <optgroup label="Asturias y Cantabria">
-          <option>Universidad de Oviedo (UNIOVI)</option>
           <option>Universidad de Cantabria (UC)</option>
+          <option>Universidad de Oviedo (UNIOVI)</option>
         </optgroup>
         <optgroup label="Castilla-La Mancha y Extremadura">
           <option>Universidad de Castilla-La Mancha (UCLM)</option>
@@ -922,17 +924,56 @@
     }
   };
 
+  // ====== PRE-FINALIZE — Envío previo a Sheets (antes de la pantalla de email) ======
+  const preFinalizeCall = {
+    type: jsPsychCallFunction,
+    async: true,
+    func: async (done) => {
+      try {
+        const demographics = {
+          dob: store.dob,
+          sex: store.sex,
+          studies: store.basicStudies,
+          grad_year: store.gradYear,
+          ...store.demographics,
+          policy: assignedPolicy.key
+        };
+        const results = {
+          task_text: store.task_text,
+          words: wordsOf(store.task_text),
+          edits: store.task_edits,
+          ai_usage: store.ai_usage,
+          ai_chars_inserted: store.ai_text_inserted,
+          paste_count: store.paste_count,
+          paste_total_chars: store.paste_total_chars,
+          control: store.control,
+          personality: store.personality,
+          ai_motivation: store.ai_motivation
+        };
+        await flushAndWait();
+        await fetchWithRetry('/finalize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subject_id, demographics, results, email: '' })
+        }, 3);
+      } catch (e) {
+        console.warn('⚠️ pre-finalize failed:', e.message);
+      } finally {
+        done();
+      }
+    }
+  };
+
   // ====== PANTALLA FINAL — Contacto (opcional) ======
   const sEmail = {
     type: jsPsychSurveyHtmlForm,
     preamble: `
-      <h2>¡Ya casi terminamos!</h2>
-      <p>Si deseas recibir más información sobre los resultados de esta investigación,
-      puedes dejarnos tu correo electrónico.</p>
-      <p class="muted">Este dato es completamente <strong>opcional</strong> y no se vinculará con tus respuestas anteriores.</p>
+      <h2>¡Ya terminamos!</h2>
+      <p>Si deseas recibir más información sobre los resultados de esta investigación, puedes dejarnos tu correo electrónico.</p>
+      <p>Este dato es completamente <strong style="color:#d97706;">OPCIONAL</strong>.</p>
     `,
     html: `
-      <label class="label">Correo electrónico (opcional)</label>
+      <label class="label">Correo electrónico (<strong style="color:#d97706;">OPCIONAL</strong>)</label>
       <input class="input" type="email" name="email" placeholder="tu@email.com" />
     `,
     button_label: 'Finalizar',
@@ -1064,7 +1105,7 @@
   // ====== Timeline completo ======
   // sEmail recoge contacto opcional; finalizeCall envía todo a /finalize;
   // el mensaje de agradecimiento se muestra en el on_finish de jsPsych.
-  const timeline = [s1, s2, s3, s4, s4b, s5, s6, s7, s7b, sEmail, finalizeCall];
+  const timeline = [s1, s2, s3, s4, s4b, s5, s6, s7, s7b, preFinalizeCall, sEmail, finalizeCall];
 
   // ¡Comenzar!
   jsPsych.run(timeline);
