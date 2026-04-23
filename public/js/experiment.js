@@ -951,12 +951,15 @@
           ai_motivation: store.ai_motivation
         };
         await flushAndWait();
-        await fetchWithRetry('/finalize', {
+        const result = await fetchWithRetry('/finalize', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ subject_id, demographics, results, email: '' })
         }, 3);
+        store._finalize_ok = result.ok;
+        await sendLog('finalize_sent', { success: result.ok, error: result.ok ? null : result.error }).catch(() => {});
       } catch (e) {
+        store._finalize_ok = false;
         console.warn('⚠️ pre-finalize failed:', e.message);
       } finally {
         done();
@@ -964,23 +967,32 @@
     }
   };
 
-  // ====== PANTALLA FINAL — Contacto (opcional) ======
+  // ====== PANTALLA FINAL — Gracias + correo opcional ======
   const sEmail = {
     type: jsPsychSurveyHtmlForm,
     preamble: `
       <h2>¡Ya terminamos!</h2>
-      <p>Si deseas recibir más información sobre los resultados de esta investigación, puedes dejarnos tu correo electrónico.</p>
+      <p>Tus respuestas han sido guardadas correctamente. <strong>Puedes cerrar esta ventana ahora si lo deseas.</strong></p>
+      <hr style="margin:20px 0;border:none;border-top:1px solid #e5e7eb;" />
+      <p style="margin-bottom:4px;">Si deseas recibir más información sobre los resultados de esta investigación, puedes dejarnos tu correo electrónico.</p>
       <p>Este dato es completamente <strong style="color:#d97706;">OPCIONAL</strong>.</p>
     `,
     html: `
       <label class="label">Correo electrónico (<strong style="color:#d97706;">OPCIONAL</strong>)</label>
-      <input class="input" type="email" name="email" placeholder="tu@email.com" />
+      <input class="input" type="email" name="email" id="sEmail_input" placeholder="tu@email.com" />
     `,
-    button_label: 'Finalizar',
+    button_label: 'Salir',
+    on_load: () => {
+      const input = document.getElementById('sEmail_input');
+      const btn = document.querySelector('.jspsych-btn');
+      input.addEventListener('input', () => {
+        btn.textContent = input.value.trim() ? 'Enviar correo' : 'Salir';
+      });
+    },
     on_finish: async (data) => {
       store.email = (data.response.email || '').trim();
       if (store.email) {
-        await sendLog('email_provided', { has_email: true });
+        await sendLog('email_provided', { email: store.email });
       }
     }
   };
@@ -1047,57 +1059,17 @@
     return { ok: false, error: lastError?.message || 'Error desconocido' };
   }
 
+  // Los datos ya se enviaron en preFinalizeCall; aquí solo flusheamos el log del email.
   const finalizeCall = {
     type: jsPsychCallFunction,
     async: true,
     func: async (done) => {
       try {
-        const demographics = {
-          dob: store.dob,
-          sex: store.sex,
-          studies: store.basicStudies,
-          grad_year: store.gradYear,
-          ...store.demographics,
-          policy: assignedPolicy.key
-        };
-        const results = {
-          task_text: store.task_text,
-          words: wordsOf(store.task_text),
-          edits: store.task_edits,
-          ai_usage: store.ai_usage,
-          // Métricas conductuales (automáticas, no autoreportadas)
-          ai_chars_inserted: store.ai_text_inserted,
-          paste_count: store.paste_count,
-          paste_total_chars: store.paste_total_chars,
-          control: store.control,
-          personality: store.personality,
-          ai_motivation: store.ai_motivation
-        };
-
-        // IMPORTANTE: Flush todos los eventos pendientes antes de finalizar
         await flushAndWait();
-
-        // Enviar datos finales con reintentos (3 intentos con backoff exponencial)
-        const result = await fetchWithRetry('/finalize', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ subject_id, demographics, results, email: store.email })
-        }, 3);
-
-        store._finalize_ok = result.ok;
-
-        // Registrar resultado del intento de finalización
-        await sendLog('finalize_sent', {
-          success: result.ok,
-          error: result.ok ? null : result.error
-        }).catch(() => {});
-
-        // Flush final para que el evento finalize_sent también llegue al servidor
-        await flushAndWait();
-      } catch (unexpectedError) {
-        console.error('❌ Error inesperado en finalizeCall:', unexpectedError);
+      } catch (e) {
+        console.warn('⚠️ final flush failed:', e.message);
       } finally {
-        done(); // Siempre llamar done() para que jsPsych no se quede colgado
+        done();
       }
     }
   };
