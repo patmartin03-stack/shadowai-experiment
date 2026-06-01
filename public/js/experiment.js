@@ -1,6 +1,26 @@
 // public/js/experiment.js
-// Experimento 1→8 con jsPsych. Registra métricas en /log y envía resumen a /finalize.
-// No hay claves de API en el frontend.
+// =============================================================
+// Shadow AI — Lógica del experimento (frontend, jsPsych 7.3.3)
+// =============================================================
+//
+// Construye el experimento como una secuencia (timeline) de pantallas:
+//   1.  Bienvenida y consentimiento
+//   2.  Datos iniciales (nacimiento, sexo, estudios)
+//   3.  Introducción a la tarea + política de IA asignada (visible)
+//   4.  Tarea de redacción (60–120 palabras) con botón "Ayuda de IA"
+//   4b. Declaración autoreportada de uso de IA
+//   5.  Preguntas de control sobre la tarea
+//   6.  Datos demográficos ampliados (universidad, rama, nota)
+//   7.  Cuestionario "Tu entorno y la IA" (escalas Likert)
+//   7b. Cuestionario "Tus valores y motivaciones" (escalas Likert)
+//   --  Envío de resultados a /finalize y pantalla de agradecimiento
+//
+// A cada participante se le asigna una de tres políticas al azar
+// (permisiva / ambigua / restrictiva). Durante todo el flujo se registran
+// métricas conductuales (clics, tiempo por pantalla, copiar/pegar, uso del
+// botón de IA) en lotes vía /log-batch, y al terminar se envía un resumen
+// a /finalize. No hay claves de API en el frontend: las llamadas a la IA
+// pasan siempre por el backend.
 
 (() => {
   // ====== Utilidades básicas ======
@@ -224,7 +244,6 @@
   // ====== VARIABLES QUE RECOGEMOS A LO LARGO DEL FLUJO ======
   const store = {
     dob: '', sex: '', basicStudies: '', gradYear: null,
-    intro_ack: true,
     task_text: '', task_edits: [],
     ai_usage: {},
     control: {}, demographics: {}, personality: {}, ai_motivation: {},
@@ -905,7 +924,7 @@
     }
   };
 
-  // ====== PANTALLA 8B — Sobre tus valores y motivaciones (Likert 5 puntos horizontal) ======
+  // ====== PANTALLA 7B — Sobre tus valores y motivaciones (Likert 5 puntos horizontal) ======
   const s7b = {
     type: jsPsychSurveyHtmlForm,
     preamble: `<h2>Sobre tus valores y motivaciones</h2><p class="muted">Indica tu nivel de acuerdo con cada afirmación<br>(1 = Totalmente en desacuerdo &nbsp;·&nbsp; 5 = Totalmente de acuerdo).</p>`,
