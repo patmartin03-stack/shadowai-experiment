@@ -924,6 +924,50 @@
     }
   };
 
+  // ====== Reintenta fetch con backoff exponencial ======
+  async function fetchWithRetry(url, options, maxRetries = 3) {
+    let lastError;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const response = await fetch(url, options);
+
+        if (!response.ok) {
+          let errorMessage = `HTTP error ${response.status}`;
+          try {
+            const errorData = await response.json();
+            if (errorData && errorData.error) errorMessage = errorData.error;
+          } catch (e) { /* no se pudo parsear */ }
+
+          if (response.status >= 500 || response.status === 503) {
+            throw new Error(errorMessage);
+          } else {
+            return { ok: false, error: errorMessage, response };
+          }
+        }
+
+        let result;
+        try {
+          result = await response.json();
+        } catch (e) {
+          throw new Error('Respuesta inválida del servidor');
+        }
+
+        if (!result || typeof result !== 'object') {
+          throw new Error('Respuesta inválida del servidor');
+        }
+
+        return { ok: true, data: result, response };
+      } catch (error) {
+        lastError = error;
+        console.warn(`⚠️ Intento ${attempt + 1}/${maxRetries} falló:`, error.message);
+        if (attempt < maxRetries - 1) {
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+        }
+      }
+    }
+    return { ok: false, error: lastError?.message || 'Error desconocido' };
+  }
+
   // ====== PRE-FINALIZE — Envío previo a Sheets (antes de la pantalla de email) ======
   const preFinalizeCall = {
     type: jsPsychCallFunction,
@@ -996,68 +1040,6 @@
       }
     }
   };
-
-  // ====== FINALIZE — Envío de datos al terminar (invisible para el usuario) ======
-  // Función auxiliar para reintentar con backoff exponencial
-  async function fetchWithRetry(url, options, maxRetries = 3) {
-    let lastError;
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        const response = await fetch(url, options);
-
-        // Validar respuesta
-        if (!response.ok) {
-          let errorMessage = `HTTP error ${response.status}`;
-          try {
-            const errorData = await response.json();
-            if (errorData && errorData.error) {
-              errorMessage = errorData.error;
-            }
-          } catch (e) {
-            // No se pudo parsear el error
-          }
-
-          // Si es un error del servidor (5xx) o servicio no disponible, reintentar
-          if (response.status >= 500 || response.status === 503) {
-            throw new Error(errorMessage);
-          } else {
-            // Error del cliente (4xx), no reintentar
-            return { ok: false, error: errorMessage, response };
-          }
-        }
-
-        // Parsear JSON con validación
-        let result;
-        try {
-          result = await response.json();
-        } catch (e) {
-          console.error('Error parseando JSON de respuesta:', e);
-          throw new Error('Respuesta inválida del servidor');
-        }
-
-        // Validar estructura de respuesta
-        if (!result || typeof result !== 'object') {
-          console.error('Respuesta no es un objeto:', result);
-          throw new Error('Respuesta inválida del servidor');
-        }
-
-        return { ok: true, data: result, response };
-      } catch (error) {
-        lastError = error;
-        console.warn(`⚠️ Intento ${attempt + 1}/${maxRetries} falló:`, error.message);
-
-        // Si no es el último intento, esperar antes de reintentar
-        if (attempt < maxRetries - 1) {
-          const delay = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
-          console.log(`⏳ Esperando ${delay}ms antes de reintentar...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
-      }
-    }
-
-    // Todos los intentos fallaron
-    return { ok: false, error: lastError?.message || 'Error desconocido' };
-  }
 
   // Los datos ya se enviaron en preFinalizeCall; aquí solo flusheamos el log del email.
   const finalizeCall = {

@@ -3,7 +3,6 @@
 # =============================================================
 
 import os
-import os.path
 import json
 import time as _time
 import threading
@@ -572,17 +571,9 @@ def finalize():
             print("⚠️ ERROR en /finalize: results debe ser un objeto")
             results = {}
 
-        # Debug: Log task_text length y preview
         task_text = results.get("task_text", "")
-        has_newlines = '\n' in task_text
-        print(f"📝 Finalizando participante {subject_id}:")
-        print(f"   - task_text length: {len(task_text)} caracteres")
-        print(f"   - words: {results.get('words', 0)} palabras")
-        print(f"   - task_text preview (primeros 100 chars): {task_text[:100] if task_text else '(vacío)'}")
-        print(f"   - task_text tiene saltos de línea: {'Sí' if has_newlines else 'No'}")
+        print(f"📝 Finalizando participante {subject_id} — {results.get('words', 0)} palabras")
 
-        # Flush de eventos pendientes ANTES de guardar resultados
-        print(f"🔄 Flushing eventos pendientes antes de finalizar...")
         flush_events()
 
         # Conectar con Google Sheets (usando caché)
